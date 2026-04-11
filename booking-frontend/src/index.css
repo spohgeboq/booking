@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-neutral-bg1 text-text-primary font-sans antialiased selection:bg-brand selection:text-white;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus ring accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-neutral-bg1 transition-shadow;
+  }
+}
+
+@layer components {
+  /* Glassmorphism primitives */
+  .glass {
+    @apply backdrop-blur-md bg-white/[0.03] border border-border;
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl shadow-xl;
+  }
+
+  .glass-panel {
+    @apply backdrop-blur-lg bg-neutral-bg1/80 border-b border-border;
+  }
+
+  .glass-input {
+    @apply backdrop-blur-sm bg-white/[0.03] border border-border 
+           focus:border-brand/50 focus:bg-white/[0.05] transition-colors rounded-xl px-4 min-h-touch;
+  }
+
+  /* Clickable touch targets (Fitts law) */
+  .touch-target {
+    @apply min-h-touch min-w-touch flex items-center justify-center;
+  }
+}
+
+/* Scrollbar styling for desktop */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-neutral-bg4/50 rounded-full hover:bg-neutral-bg4 transition-colors;
+  }
+}
+
+/* Animations that are not tailwind-native */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+.page-transition-exit {
+  opacity: 1;
+}
+.page-transition-exit-active {
+  opacity: 0;
+  transition: opacity 200ms;
+}
