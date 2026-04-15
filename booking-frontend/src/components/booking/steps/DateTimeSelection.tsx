@@ -7,40 +7,46 @@ import { ru } from 'date-fns/locale';
 import { Button } from '../../ui/Button';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 
-// Конвертирует JS getDay() (0=Вс, 1=Пн, ..., 6=Сб) в наш формат (1=Пн, ..., 7=Вс)
+// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ СО ВРЕМЕНЕМ =====
+
+const DEFAULT_START = '09:00';
+const DEFAULT_END = '18:00';
+
+/**
+ * Конвертирует день недели из формата JS (0=Вс, 1=Пн...6=Сб)
+ * в формат БД (1=Пн, 2=Вт...7=Вс)
+ */
 function jsDayToDbDay(jsDay: number): number {
     return jsDay === 0 ? 7 : jsDay;
 }
 
-function timeToMinutes(time?: string | null): number {
-    if (!time) return 0;
-    const [h, m] = time.split(':').map(Number);
-    return h * 60 + m;
+/**
+ * Конвертирует строку времени "HH:MM" в количество минут от полуночи
+ */
+function timeToMinutes(time: string): number {
+    const parts = time.split(':');
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
 }
 
-// Генерирует слоты каждые 30 минут между start и end
-function generateTimeSlots(
-    startTime: string,
-    endTime: string,
-    stepMinutes: number = 30
-): string[] {
-    const slots: string[] = [];
+/**
+ * Генерирует массив временных слотов от startTime до endTime
+ * с шагом 30 минут, учитывая длительность услуги
+ */
+function generateTimeSlots(startTime: string, endTime: string, duration: number): string[] {
     const startMin = timeToMinutes(startTime);
     const endMin = timeToMinutes(endTime);
+    const slots: string[] = [];
 
-    for (let m = startMin; m < endMin; m += stepMinutes) {
-        const hour = Math.floor(m / 60);
+    for (let m = startMin; m + duration <= endMin; m += 30) {
+        const h = Math.floor(m / 60);
         const min = m % 60;
-        slots.push(`${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
+        slots.push(`${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
     }
+
     return slots;
 }
-
-// Дефолтные слоты, если расписание не задано
-const DEFAULT_START = '09:00';
-const DEFAULT_END = '21:00';
 
 export function DateTimeSelection() {
     const setDateTime = useBookingStore(state => state.setDateTime);
@@ -57,24 +63,33 @@ export function DateTimeSelection() {
 
     useEffect(() => {
         let isMounted = true;
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
         const fetchAppointments = async () => {
-            const dateStr = format(selectedDate, 'yyyy-MM-dd');
-            const { data, error } = await supabase
-                .from('appointments')
-                .select('start_time, end_time, employee_id')
-                .eq('appointment_date', dateStr)
-                .neq('status', 'cancelled');
+            try {
+                const data = await api.appointments.getAll({
+                    date: dateStr,
+                    status_neq: 'cancelled'
+                });
                 
-            if (error) {
+                if (isMounted && data) {
+                    setBookedSlots(data);
+                }
+            } catch (error) {
                 console.error('Error fetching appointments:', error);
-                return;
-            }
-            if (isMounted && data) {
-                setBookedSlots(data);
             }
         };
+
         fetchAppointments();
-        return () => { isMounted = false; };
+
+        // Вместо Supabase Realtime используем поллинг раз в 30 секунд
+        // Это поможет предотвратить овербукинг, если кто-то другой забронировал слот
+        const interval = setInterval(fetchAppointments, 30000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [selectedDate]);
 
     // Вычисляем суммарную продолжительность выбранных услуг
@@ -110,7 +125,6 @@ export function DateTimeSelection() {
         return masterSchedule.find(s => s.day_of_week === dbDay) || null;
     }, [masterSchedule, selectedDate]);
 
-    // Генерируем сырые слоты времени перед фильтрацией (базово)
     const timeSlots = useMemo(() => {
         if (!masterId) {
             // Если выбран "Любой мастер", находим крайнее время начала и окончания среди всех работающих
@@ -135,15 +149,16 @@ export function DateTimeSelection() {
             const startTimeStr = `${sh.toString().padStart(2, '0')}:${sm.toString().padStart(2, '0')}`;
             const endTimeStr = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
             
-            return generateTimeSlots(startTimeStr, endTimeStr);
+            return generateTimeSlots(startTimeStr, endTimeStr, totalDuration);
         } else {
             if (!daySchedule || !daySchedule.is_working) return [];
             return generateTimeSlots(
                 daySchedule.start_time || DEFAULT_START,
-                daySchedule.end_time || DEFAULT_END
+                daySchedule.end_time || DEFAULT_END,
+                totalDuration
             );
         }
-    }, [daySchedule, masterId, selectedDate, schedules]);
+    }, [daySchedule, masterId, selectedDate, schedules, totalDuration]);
 
     const isSlotAvailable = (slotTime: string) => {
         const slotStart = timeToMinutes(slotTime);

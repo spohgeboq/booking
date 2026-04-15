@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import {
     format,
     addMonths,
@@ -38,13 +38,11 @@ export function CalendarView() {
             const start = format(startOfWeek(startOfMonth(date), { weekStartsOn: 1 }), 'yyyy-MM-dd');
             const end = format(endOfWeek(endOfMonth(date), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-            const { data, error } = await supabase
-                .from('appointments')
-                .select('id, appointment_date, start_time, status, client_name')
-                .gte('appointment_date', start)
-                .lte('appointment_date', end);
+            const data = await api.appointments.getAll({
+                start_date: start,
+                end_date: end
+            });
 
-            if (error) throw error;
             setAppointments(data as AppointmentRecord[]);
         } catch (error) {
             console.error('Error fetching calendar appointments:', error);

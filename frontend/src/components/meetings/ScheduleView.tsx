@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { format, addDays, subDays } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon } from 'lucide-react';
@@ -30,21 +30,10 @@ export function ScheduleView() {
         setLoading(true);
         try {
             const dateStr = format(date, 'yyyy-MM-dd');
-            const { data, error } = await supabase
-                .from('appointments')
-                .select(`
-                    id, 
-                    start_time, 
-                    end_time, 
-                    client_name, 
-                    status,
-                    services (name),
-                    employees (first_name, last_name)
-                `)
-                .eq('appointment_date', dateStr)
-                .order('start_time', { ascending: true });
+            const data = await api.appointments.getAll({
+                date: dateStr
+            });
 
-            if (error) throw error;
             setAppointments(data as any as ScheduleAppointment[]);
         } catch (error: any) {
             toast.error('Ошибка при загрузке расписания: ' + error.message);

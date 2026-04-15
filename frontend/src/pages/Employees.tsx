@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Users, Plus, Edit, Trash2, Loader2, Search, X, Check, Clock, Calendar, Copy } from 'lucide-react';
+import { api } from '../lib/api';
+import { Users, Plus, Edit, Trash2, Loader2, Search, X, Check, Calendar, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ========== РАСПИСАНИЕ ==========
-// deleted DAY_NAMES
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 interface ScheduleDay {
@@ -111,38 +110,18 @@ export function Employees() {
         setLoading(true);
         try {
             // Сотрудники
-            const { data: empData, error: empError } = await supabase
-                .from('employees')
-                .select('*')
-                .order('first_name');
-            if (empError) throw empError;
-
+            const empData = await api.employees.getAll();
             // Все услуги
-            const { data: svcData, error: svcError } = await supabase
-                .from('services')
-                .select('id, name, category, price, duration_minutes')
-                .order('category')
-                .order('name');
-            if (svcError) throw svcError;
-
-            // Привязки employee_services
-            const { data: esData, error: esError } = await supabase
-                .from('employee_services')
-                .select('employee_id, service_id');
-            if (esError) throw esError;
+            const svcData = await api.services.getAll();
 
             const services: Service[] = svcData || [];
             setAllServices(services);
 
             const mapped = (empData || []).map((emp: any) => {
-                const serviceIds = (esData || [])
-                    .filter((es: any) => es.employee_id === emp.id)
-                    .map((es: any) => es.service_id);
                 return {
                     ...emp,
                     fullName: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
                     photo_url: emp.avatar_url || emp.image_url || '',
-                    serviceIds,
                 };
             });
             setEmployees(mapped);
@@ -155,33 +134,29 @@ export function Employees() {
 
     // Загрузка расписания сотрудника
     const fetchSchedule = async (employeeId: string) => {
-        const { data, error } = await supabase
-            .from('schedules')
-            .select('*')
-            .eq('employee_id', employeeId)
-            .order('day_of_week');
-        if (error) {
+        try {
+            const data = await api.schedules.getAll({ employee_id: employeeId });
+            if (data && data.length > 0) {
+                const mapped: ScheduleDay[] = defaultSchedule.map(def => {
+                    const fromDb = data.find((d: any) => d.day_of_week === def.day_of_week);
+                    if (fromDb) {
+                        return {
+                            day_of_week: fromDb.day_of_week,
+                            is_working: fromDb.is_working ?? true,
+                            start_time: fromDb.start_time?.slice(0, 5) || '09:00',
+                            end_time: fromDb.end_time?.slice(0, 5) || '18:00',
+                            break_start: fromDb.break_start?.slice(0, 5) || '13:00',
+                            break_end: fromDb.break_end?.slice(0, 5) || '14:00',
+                        };
+                    }
+                    return def;
+                });
+                setScheduleData(mapped);
+            } else {
+                setScheduleData(defaultSchedule);
+            }
+        } catch (error: any) {
             console.error('Ошибка загрузки расписания:', error);
-            return;
-        }
-        if (data && data.length > 0) {
-            const mapped: ScheduleDay[] = defaultSchedule.map(def => {
-                const fromDb = data.find((d: any) => d.day_of_week === def.day_of_week);
-                if (fromDb) {
-                    return {
-                        day_of_week: fromDb.day_of_week,
-                        is_working: fromDb.is_working ?? true,
-                        start_time: fromDb.start_time?.slice(0, 5) || '09:00',
-                        end_time: fromDb.end_time?.slice(0, 5) || '18:00',
-                        break_start: fromDb.break_start?.slice(0, 5) || '13:00',
-                        break_end: fromDb.break_end?.slice(0, 5) || '14:00',
-                    };
-                }
-                return def;
-            });
-            setScheduleData(mapped);
-        } else {
-            setScheduleData(defaultSchedule);
         }
     };
 
@@ -224,53 +199,21 @@ export function Employees() {
                 avatar_url: formData.photo_url || null,
                 commission_type: formData.commission_type,
                 commission_value: formData.commission_value || 0,
-                updated_at: new Date().toISOString(),
+                serviceIds: selectedServiceIds,
             };
 
             let employeeId: string;
 
             if (editingEmployee) {
-                const { error } = await supabase
-                    .from('employees')
-                    .update(dbPayload)
-                    .eq('id', editingEmployee.id);
-                if (error) throw error;
+                await api.employees.update(editingEmployee.id, dbPayload);
                 employeeId = editingEmployee.id;
             } else {
-                const { data, error } = await supabase
-                    .from('employees')
-                    .insert([dbPayload])
-                    .select('id')
-                    .single();
-                if (error) throw error;
-                employeeId = data.id;
-            }
-
-            // Сначала удаляем старые привязки услуг
-            const { error: delError } = await supabase
-                .from('employee_services')
-                .delete()
-                .eq('employee_id', employeeId);
-            if (delError) throw delError;
-
-            // Вставляем новые привязки
-            if (selectedServiceIds.length > 0) {
-                const inserts = selectedServiceIds.map(sid => ({
-                    employee_id: employeeId,
-                    service_id: sid,
-                }));
-                const { error: insError } = await supabase
-                    .from('employee_services')
-                    .insert(inserts);
-                if (insError) throw insError;
+                const result = await api.employees.create(dbPayload);
+                employeeId = result.id;
             }
 
             // ===== СОХРАНЕНИЕ РАСПИСАНИЯ =====
-            // Удаляем старое расписание
-            await supabase.from('schedules').delete().eq('employee_id', employeeId);
-            // Вставляем новое
             const scheduleInserts = scheduleData.map(day => ({
-                employee_id: employeeId,
                 day_of_week: day.day_of_week,
                 is_working: day.is_working,
                 start_time: day.is_working ? day.start_time : null,
@@ -278,8 +221,7 @@ export function Employees() {
                 break_start: day.is_working ? day.break_start : null,
                 break_end: day.is_working ? day.break_end : null,
             }));
-            const { error: schedError } = await supabase.from('schedules').insert(scheduleInserts);
-            if (schedError) throw schedError;
+            await api.schedules.update({ employee_id: employeeId, schedules: scheduleInserts });
 
             toast.success(editingEmployee ? 'Сотрудник обновлён' : 'Сотрудник добавлен');
             setIsModalOpen(false);
@@ -294,10 +236,7 @@ export function Employees() {
     const handleDelete = async (id: string, name: string) => {
         if (!confirm(`Вы уверены, что хотите удалить сотрудника "${name}"?`)) return;
         try {
-            // Каскадное удаление: сначала employee_services
-            await supabase.from('employee_services').delete().eq('employee_id', id);
-            const { error } = await supabase.from('employees').delete().eq('id', id);
-            if (error) throw error;
+            await api.employees.delete(id);
             toast.success('Сотрудник удалён');
             fetchAll();
         } catch (error: any) {
@@ -339,17 +278,8 @@ export function Employees() {
         if (!file) return;
         setUploadingImage(true);
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-            const filePath = `employees/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(filePath, file);
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage.from('images').getPublicUrl(filePath);
-            setFormData(prev => ({ ...prev, photo_url: data.publicUrl }));
+            const data = await api.upload(file);
+            setFormData(prev => ({ ...prev, photo_url: data.url }));
             toast.success('Фото загружено');
         } catch (error: any) {
             toast.error('Ошибка загрузки: ' + error.message);
@@ -374,8 +304,8 @@ export function Employees() {
 
     const filteredEmployees = employees.filter(emp =>
         emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.specialization?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.position?.toLowerCase().includes(searchTerm.toLowerCase())
+        (emp.specialization && emp.specialization.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (emp.position && emp.position.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const inputCls = "w-full px-3 py-2 bg-neutral-bg3/50 border border-neutral-border rounded-xl text-white placeholder-neutral-text3 focus:ring-2 focus:ring-primary/50 outline-none transition-all";
@@ -438,14 +368,14 @@ export function Employees() {
                                     </tr>
                                 ) : (
                                     filteredEmployees.map((emp) => {
-                                        const empServices = allServices.filter(s => emp.serviceIds.includes(s.id));
+                                        const empServices = allServices.filter(s => (emp.serviceIds || []).includes(s.id));
                                         return (
                                             <tr key={emp.id} className="hover:bg-neutral-bg3/30 transition-colors">
                                                 <td className="p-4">
                                                     <div className="flex items-center">
                                                         <div className="w-10 h-10 rounded-full bg-neutral-bg3 border border-neutral-border overflow-hidden mr-3 shrink-0">
                                                             {emp.photo_url ? (
-                                                                <img src={emp.photo_url} alt={emp.fullName} className="w-full h-full object-cover" />
+                                                                <img src={emp.photo_url.startsWith('http') ? emp.photo_url : `${import.meta.env.VITE_BACKEND_URL}${emp.photo_url}`} alt={emp.fullName} className="w-full h-full object-cover" />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center text-neutral-text3 bg-neutral-bg2">
                                                                     <Users className="w-5 h-5" />
@@ -559,7 +489,7 @@ export function Employees() {
                                     <div className="flex items-center gap-4">
                                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-neutral-border bg-neutral-bg3 shrink-0 flex items-center justify-center">
                                             {formData.photo_url ? (
-                                                <img src={formData.photo_url} alt="Аватар" className="w-full h-full object-cover" />
+                                                <img src={formData.photo_url.startsWith('http') ? formData.photo_url : `${import.meta.env.VITE_BACKEND_URL}${formData.photo_url}`} alt="Аватар" className="w-full h-full object-cover" />
                                             ) : (
                                                 <Users className="w-7 h-7 text-neutral-text3" />
                                             )}
@@ -713,14 +643,14 @@ export function Employees() {
                                                                 key={svc.id}
                                                                 onClick={() => toggleService(svc.id)}
                                                                 className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors border-b border-neutral-border/50 last:border-b-0 ${isSelected
-                                                                        ? 'bg-primary/10 hover:bg-primary/15'
-                                                                        : 'hover:bg-neutral-bg3/30'
+                                                                    ? 'bg-primary/10 hover:bg-primary/15'
+                                                                    : 'hover:bg-neutral-bg3/30'
                                                                     }`}
                                                             >
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-all ${isSelected
-                                                                            ? 'bg-primary border-primary'
-                                                                            : 'border-neutral-border bg-neutral-bg3/50'
+                                                                        ? 'bg-primary border-primary'
+                                                                        : 'border-neutral-border bg-neutral-bg3/50'
                                                                         }`}>
                                                                         {isSelected && <Check className="w-3 h-3 text-white" />}
                                                                     </div>
@@ -803,7 +733,7 @@ export function Employees() {
                                                             />
                                                         </>
                                                     ) : (
-                                                        <span className="text-neutral-text3 text-xs italic">Выходной</span>
+                                                        <span className="text-xs text-neutral-text3 text-center w-full italic">Выходной</span>
                                                     )}
                                                 </div>
 
@@ -826,18 +756,18 @@ export function Employees() {
                                                             />
                                                         </>
                                                     ) : (
-                                                        <span className="text-neutral-text3 text-xs">—</span>
+                                                        <span className="text-xs text-neutral-text3 text-center w-full italic">—</span>
                                                     )}
                                                 </div>
 
-                                                {/* Кнопка копировать */}
-                                                <div>
-                                                    {day.is_working && (
+                                                {/* Копировать */}
+                                                <div className="flex justify-end">
+                                                    {day.is_working && idx === 0 && (
                                                         <button
                                                             type="button"
                                                             onClick={() => copyToAllDays(idx)}
-                                                            className="p-1 hover:bg-primary/20 hover:text-primary rounded transition-colors text-neutral-text3"
-                                                            title={`Скопировать расписание ${DAY_SHORT[idx]} на все дни`}
+                                                            className="p-1.5 hover:bg-neutral-bg3 rounded text-neutral-text3 hover:text-primary transition-colors"
+                                                            title="Применить это время ко всем дням"
                                                         >
                                                             <Copy className="w-3.5 h-3.5" />
                                                         </button>
@@ -846,46 +776,33 @@ export function Employees() {
                                             </div>
                                         ))}
                                     </div>
-                                    <p className="text-xs text-neutral-text3 mt-2 flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Нажмите <Copy className="w-3 h-3 inline" /> чтобы скопировать время на все дни
-                                    </p>
                                 </div>
 
                                 {/* Комиссия */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-neutral-border/50">
                                     <div>
                                         <label className={labelCls}>Тип комиссии</label>
                                         <select
                                             value={formData.commission_type}
-                                            onChange={e => setFormData(prev => ({
-                                                ...prev,
-                                                commission_type: e.target.value as 'percentage' | 'fixed'
-                                            }))}
+                                            onChange={e => setFormData(prev => ({ ...prev, commission_type: e.target.value as any }))}
                                             className={inputCls}
                                         >
-                                            <option value="percentage">Процент (%)</option>
-                                            <option value="fixed">Фиксированная сумма (₸)</option>
+                                            <option value="percentage">Процент %</option>
+                                            <option value="fixed">Фикс ₸</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label className={labelCls}>
-                                            {formData.commission_type === 'percentage' ? 'Процент (%)' : 'Сумма (₸)'}
-                                        </label>
+                                        <label className={labelCls}>Значение комиссии</label>
                                         <input
                                             type="number" min="0"
                                             value={formData.commission_value}
-                                            onChange={e => setFormData(prev => ({
-                                                ...prev,
-                                                commission_value: parseFloat(e.target.value) || 0
-                                            }))}
+                                            onChange={e => setFormData(prev => ({ ...prev, commission_value: parseInt(e.target.value) || 0 }))}
                                             className={inputCls}
                                         />
                                     </div>
                                 </div>
 
-                                {/* Кнопки */}
-                                <div className="pt-2 flex justify-end gap-3 border-t border-neutral-border">
+                                <div className="flex justify-end gap-3 sticky bottom-0 bg-neutral-bg2 pt-4 pb-2 border-t border-neutral-border/50 mt-8">
                                     <button
                                         type="button"
                                         onClick={() => setIsModalOpen(false)}
@@ -899,7 +816,7 @@ export function Employees() {
                                         className="px-6 py-2 bg-primary hover:bg-primary-light text-white rounded-xl text-sm font-medium transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 flex items-center gap-2"
                                     >
                                         {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                                        {saving ? 'Сохранение...' : 'Сохранить'}
+                                        Сохранить
                                     </button>
                                 </div>
                             </form>
@@ -910,3 +827,4 @@ export function Employees() {
         </div>
     );
 }
+

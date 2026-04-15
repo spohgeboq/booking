@@ -33,7 +33,7 @@ if (!url || !key) {
 }
 
 const email = 'nurkasymidragim@gmail.com';
-const password = 'Nurka070201';
+const password = 'admin';
 
 async function createAdmin() {
     console.log(`Creating admin user: ${email}...`);

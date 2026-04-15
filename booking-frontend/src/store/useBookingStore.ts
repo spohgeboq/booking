@@ -11,6 +11,7 @@ export type BookingStep =
 
 export interface Appointment {
     id: string;
+    dbId?: string; // UUID из базы данных для синхронизации
     date: Date;
     selectedServices: string[];
     serviceId?: string; // Для обратной совместимости со старыми записями в localStorage

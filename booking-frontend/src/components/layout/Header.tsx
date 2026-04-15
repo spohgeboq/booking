@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useBookingStore } from '../../store/useBookingStore';
 import { useDataStore } from '../../store/useDataStore';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 
 export function Header() {
     const location = useLocation();
@@ -44,23 +44,25 @@ export function Header() {
         setIsLoading(true);
         setAdminError('');
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: adminEmail,
-            password: adminPassword,
-        });
+        try {
+            const data = await api.auth.login({
+                email: adminEmail,
+                password: adminPassword,
+            });
 
-        setIsLoading(false);
+            setIsLoading(false);
 
-        if (error) {
-            setAdminError('Неверный логин или пароль');
-        } else {
-            setShowAdminLogin(false);
-            // Перенаправляем в админку с передачей токена через хэш (раз мы используем Supabase, мы можем просто перейти. 
-            // Но чтобы админка поймала сессию на другом домене/порту нужны доп. меры.
-            // Для локальной разработки перенаправляем на адрес админки:
-            const adminUrl = import.meta.env.VITE_ADMIN_URL || 'http://localhost:5173/';
-            // Передача access_token в URL хэше позволяет админке подхватить сессию (PKCE предпочтительней, но для локалки сойдет)
-            window.location.href = `${adminUrl}#access_token=${data.session?.access_token}&refresh_token=${data.session?.refresh_token}&expires_in=${data.session?.expires_in}&token_type=bearer&type=recovery`;
+            if (data?.token) {
+                setShowAdminLogin(false);
+                const adminUrl = import.meta.env.VITE_ADMIN_URL || 'http://localhost:5173/';
+                // Передаем JWT токен в админку через хеш
+                window.location.href = `${adminUrl}#access_token=${data.token}`;
+            } else {
+                setAdminError('Неверный логин или пароль');
+            }
+        } catch (err: any) {
+            setIsLoading(false);
+            setAdminError(err.message || 'Ошибка входа');
         }
     };
 
@@ -105,7 +107,7 @@ export function Header() {
 
                     {/* Мобильная кнопка бургера */}
                     <div className="md:hidden flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="rounded-full">
+                        <Button variant="ghost" size="icon" className="rounded-full" onClick={openAppointments}>
                             <User className="w-5 h-5" />
                         </Button>
                         <button
@@ -118,37 +120,96 @@ export function Header() {
                 </div>
             </header>
 
-            {/* Мобильное меню на весь экран */}
+            {/* Мобильное меню — боковая панель */}
             <AnimatePresence>
                 {mobileMenuOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: '-100%' }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: '-100%' }}
-                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed inset-0 z-[60] bg-neutral-bg1 flex flex-col pt-6 px-6 pb-12"
-                    >
-                        <div className="flex justify-between items-center mb-12">
-                            <span className="text-2xl font-serif font-bold text-white tracking-wide">{settings?.company_name || "L'AURA"}</span>
-                            <button
-                                className="touch-target text-white bg-white/5 rounded-full"
-                                onClick={() => setMobileMenuOpen(false)}
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="fixed inset-0 z-[55] bg-black/60 backdrop-blur-sm md:hidden"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, x: '100%' }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed top-0 right-0 bottom-0 z-[60] w-[80%] max-w-sm bg-black/40 backdrop-blur-xl border-l border-white/5 shadow-[-20px_0_40px_rgba(0,0,0,0.5)] flex flex-col pt-6 px-6 pb-8 md:hidden overflow-hidden"
+                        >
+                            {/* Скрытые неоновые блики на заднем фоне меню */}
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 rounded-full blur-[60px] translate-y-1/3 -translate-x-1/2 pointer-events-none" />
 
-                        <nav className="flex flex-col gap-6 flex-1 text-center mt-12">
-                            <Link to="/about" onClick={() => setMobileMenuOpen(false)} className={`text-3xl font-serif transition-colors ${location.pathname === '/about' ? 'text-brand-light' : 'text-white hover:text-brand-light'}`}>О нас</Link>
-                            <Link to="/services" onClick={() => setMobileMenuOpen(false)} className={`text-3xl font-serif transition-colors ${location.pathname === '/services' ? 'text-brand-light' : 'text-white hover:text-brand-light'}`}>Услуги</Link>
-                            <Link to="/team" onClick={() => setMobileMenuOpen(false)} className={`text-3xl font-serif transition-colors ${location.pathname === '/team' ? 'text-brand-light' : 'text-white hover:text-brand-light'}`}>Мастера</Link>
-                        </nav>
+                            {/* Контент */}
+                            <div className="relative z-10 flex justify-between items-center mb-12">
+                                <span className="text-xl font-serif font-bold text-white tracking-wide">{settings?.company_name || "L'AURA"}</span>
+                                <button
+                                    className="touch-target text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all flex items-center justify-center p-2"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
 
-                        <div className="flex flex-col gap-4 mt-auto">
-                            <Button size="lg" className="w-full text-lg" onClick={() => { setMobileMenuOpen(false); openBooking(); }}>Записаться онлайн</Button>
-                            <Button variant="outline" size="lg" className="w-full text-lg" onClick={() => { setMobileMenuOpen(false); openAppointments(); }}>Мои записи</Button>
-                        </div>
-                    </motion.div>
+                            <nav className="relative z-10 flex flex-col gap-8 flex-1 mt-4">
+                                {[
+                                    { path: '/about', label: 'О нас' },
+                                    { path: '/services', label: 'Услуги' },
+                                    { path: '/team', label: 'Мастера' },
+                                ].map((item, index) => (
+                                    <motion.div
+                                        key={item.path}
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.1 + index * 0.1, duration: 0.4 }}
+                                    >
+                                        <Link
+                                            to={item.path}
+                                            onClick={() => setMobileMenuOpen(false)}
+                                            className={`text-2xl font-serif font-medium transition-all duration-300 relative inline-block ${
+                                                location.pathname === item.path
+                                                    ? 'text-white drop-shadow-[0_0_12px_rgba(130,81,238,0.8)]'
+                                                    : 'text-white/60 hover:text-white hover:drop-shadow-[0_0_8px_rgba(130,81,238,0.5)]'
+                                            }`}
+                                        >
+                                            {item.label}
+                                            {/* Неоновая линия под активным пунктом */}
+                                            {location.pathname === item.path && (
+                                                <motion.div 
+                                                    layoutId="mobileActiveNav" 
+                                                    className="absolute -bottom-3 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent opacity-80" 
+                                                />
+                                            )}
+                                        </Link>
+                                    </motion.div>
+                                ))}
+                            </nav>
+
+                            <div className="relative z-10 flex flex-col mt-auto pt-6">
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.4, duration: 0.4 }}
+                                >
+                                    <button
+                                        onClick={() => { setMobileMenuOpen(false); openBooking(); }}
+                                        className="w-full relative group overflow-hidden rounded-xl font-medium text-base py-4"
+                                    >
+                                        {/* Неоновая обводка кнопки */}
+                                        <div className="absolute inset-0 rounded-xl border border-primary/40 transition-colors group-hover:border-primary/80"></div>
+                                        {/* Глубокий, слегка светящийся фон */}
+                                        <div className="absolute inset-0 bg-primary/10 group-hover:bg-primary/20 transition-colors backdrop-blur-sm"></div>
+                                        
+                                        <span className="relative z-10 text-white font-medium group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.7)] transition-all">
+                                            Записаться онлайн
+                                        </span>
+                                    </button>
+                                </motion.div>
+                            </div>
+                        </motion.div>
+                    </>
                 )}
             </AnimatePresence>
 

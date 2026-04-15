@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Scissors, Plus, Edit, Trash2, Loader2, Search, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,13 +39,7 @@ export function Services() {
     const fetchServices = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('services')
-                .select('*')
-                .order('category')
-                .order('name');
-
-            if (error) throw error;
+            const data = await api.services.getAll();
             setServices(data || []);
         } catch (error: any) {
             toast.error('Ошибка при загрузке услуг: ' + error.message);
@@ -58,17 +52,10 @@ export function Services() {
         e.preventDefault();
         try {
             if (editingService) {
-                const { error } = await supabase
-                    .from('services')
-                    .update(formData)
-                    .eq('id', editingService.id);
-                if (error) throw error;
+                await api.services.update(editingService.id, formData);
                 toast.success('Услуга обновлена');
             } else {
-                const { error } = await supabase
-                    .from('services')
-                    .insert([formData]);
-                if (error) throw error;
+                await api.services.create(formData);
                 toast.success('Услуга добавлена');
             }
             setIsModalOpen(false);
@@ -81,11 +68,7 @@ export function Services() {
     const handleDelete = async (id: string, name: string) => {
         if (!confirm(`Вы уверены, что хотите удалить услугу "${name}"?`)) return;
         try {
-            const { error } = await supabase
-                .from('services')
-                .delete()
-                .eq('id', id);
-            if (error) throw error;
+            await api.services.delete(id);
             toast.success('Услуга удалена');
             fetchServices();
         } catch (error: any) {
@@ -114,7 +97,7 @@ export function Services() {
 
     const filteredServices = services.filter(s =>
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.category?.toLowerCase().includes(searchTerm.toLowerCase())
+        (s.category && s.category.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const categories = Array.from(new Set(filteredServices.map(s => s.category || 'Без категории')));
@@ -173,7 +156,7 @@ export function Services() {
                                         <div key={service.id} className="bg-neutral-bg3/30 border border-neutral-border hover:border-primary/30 rounded-xl p-4 transition-all group relative overflow-hidden flex flex-col h-full">
                                             {service.image_url && (
                                                 <div className="w-full h-32 rounded-lg overflow-hidden mb-4 border border-neutral-border shrink-0">
-                                                    <img src={service.image_url} alt={service.name} className="w-full h-full object-cover" />
+                                                    <img src={service.image_url.startsWith('http') ? service.image_url : `${import.meta.env.VITE_BACKEND_URL}${service.image_url}`} alt={service.name} className="w-full h-full object-cover" />
                                                 </div>
                                             )}
                                             <div className="flex justify-between items-start mb-2 relative z-10">
@@ -285,7 +268,7 @@ export function Services() {
                                     <div className="flex items-center gap-4">
                                         {formData.image_url && (
                                             <div className="w-16 h-16 rounded-xl overflow-hidden border border-neutral-border bg-neutral-bg3 shrink-0">
-                                                <img src={formData.image_url} alt="Услуга" className="w-full h-full object-cover" />
+                                                <img src={formData.image_url.startsWith('http') ? formData.image_url : `${import.meta.env.VITE_BACKEND_URL}${formData.image_url}`} alt="Услуга" className="w-full h-full object-cover" />
                                             </div>
                                         )}
                                         <div className="flex-1">
@@ -297,21 +280,8 @@ export function Services() {
                                                     if (!file) return;
                                                     setUploadingImage(true);
                                                     try {
-                                                        const fileExt = file.name.split('.').pop();
-                                                        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-                                                        const filePath = `services/${fileName}`;
-
-                                                        const { error: uploadError } = await supabase.storage
-                                                            .from('images')
-                                                            .upload(filePath, file);
-
-                                                        if (uploadError) throw uploadError;
-
-                                                        const { data } = supabase.storage
-                                                            .from('images')
-                                                            .getPublicUrl(filePath);
-
-                                                        setFormData({ ...formData, image_url: data.publicUrl });
+                                                        const data = await api.upload(file);
+                                                        setFormData({ ...formData, image_url: data.url });
                                                         toast.success('Фото загружено');
                                                     } catch (error: any) {
                                                         toast.error('Ошибка загрузки: ' + error.message);

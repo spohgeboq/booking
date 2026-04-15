@@ -5,6 +5,7 @@ import { X, Calendar, User, Trash2, MapPin, Clock } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBookingStore } from '../../store/useBookingStore';
 import { useDataStore } from '../../store/useDataStore';
+import { api } from '../../lib/api';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -17,6 +18,55 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
     const { appointments, removeAppointment } = useBookingStore();
     const { services, employees, settings } = useDataStore();
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
+    const [cancelling, setCancelling] = useState(false);
+
+    // Отмена записи: удаляем из базы через API и из localStorage
+    const handleCancelAppointment = async (apt: typeof appointments[0]) => {
+        setCancelling(true);
+        try {
+            // Если есть dbId — удаляем из базы через наше API
+            if (apt.dbId) {
+                await api.appointments.delete(apt.dbId);
+            } else {
+                // Для старых записей пробуем найти по параметрам и удалить
+                const aptDate = new Date(apt.date);
+                const foundApts = await api.appointments.getAll({
+                    client_phone: apt.clientPhone,
+                    date: format(aptDate, 'yyyy-MM-dd'),
+                    start_time: format(aptDate, 'HH:mm:ss')
+                });
+
+                if (foundApts && foundApts.length > 0) {
+                    await api.appointments.delete(foundApts[0].id);
+                }
+            }
+
+            // Telegram уведомление об отмене через наш API
+            const aptServiceIds = apt.selectedServices || (apt.serviceId ? [apt.serviceId] : []);
+            const currentServices = services.filter(s => aptServiceIds.includes(s.id));
+            const master = employees.find(m => m.id === apt.masterId);
+            const aptDate = new Date(apt.date);
+
+            await api.appointments.notifyClientCancel({
+                client_name: apt.clientName,
+                client_phone: apt.clientPhone,
+                service_name: currentServices.map(s => s.name).join(', ') || 'Не указано',
+                master_name: master ? `${master.first_name} ${master.last_name}` : 'Любой мастер',
+                appointment_date: format(aptDate, 'yyyy-MM-dd'),
+                start_time: format(aptDate, 'HH:mm:ss'),
+            });
+        } catch (err) {
+            console.error('Ошибка при отмене записи:', err);
+        } finally {
+            // Удаляем из localStorage в любом случае
+            removeAppointment(apt.id);
+            setConfirmingId(null);
+            setCancelling(false);
+        }
+    };
+
+    // При открытии ящика можно было бы проверить актуальность записей в фоне, 
+    // но пока оставим без Realtime (бэкенд не поддерживает WebSockets)
 
     useEffect(() => {
         if (isOpen) {
@@ -166,12 +216,10 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
                                                             <Button
                                                                 size="sm"
                                                                 className="flex-1 bg-red-500 hover:bg-red-600 text-white border-0"
-                                                                onClick={() => {
-                                                                    removeAppointment(apt.id);
-                                                                    setConfirmingId(null);
-                                                                }}
+                                                                disabled={cancelling}
+                                                                onClick={() => handleCancelAppointment(apt)}
                                                             >
-                                                                Удалить
+                                                                {cancelling ? 'Отмена...' : 'Удалить'}
                                                             </Button>
                                                         </div>
                                                     </motion.div>

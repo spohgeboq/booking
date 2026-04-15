@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export interface Service {
     id: string;
@@ -77,41 +77,13 @@ export const useDataStore = create<DataState>((set, get) => ({
     fetchData: async () => {
         set({ loading: true, error: null });
         try {
-            // Услуги
-            const { data: servicesData, error: servicesError } = await supabase
-                .from('services')
-                .select('*')
-                .order('category')
-                .order('name');
-            if (servicesError) throw servicesError;
-
-            // Сотрудники
-            const { data: employeesData, error: employeesError } = await supabase
-                .from('employees')
-                .select('*')
-                .order('first_name');
-            if (employeesError) throw employeesError;
-
-            // Привязка сотрудников к услугам
-            const { data: empServicesData, error: empServicesError } = await supabase
-                .from('employee_services')
-                .select('employee_id, service_id');
-            if (empServicesError) throw empServicesError;
-
-            // Расписание сотрудников
-            const { data: schedulesData, error: schedulesError } = await supabase
-                .from('schedules')
-                .select('employee_id, day_of_week, is_working, start_time, end_time, break_start, break_end');
-            if (schedulesError) throw schedulesError;
-
-            // Настройки компании
-            const { data: settingsData, error: settingsError } = await supabase
-                .from('settings')
-                .select('*')
-                .limit(1)
-                .single();
-            // PGRST116 — нет строк, это нормально
-            if (settingsError && settingsError.code !== 'PGRST116') throw settingsError;
+            // Загружаем всё параллельно
+            const [servicesData, employeesData, schedulesData, settingsData] = await Promise.all([
+                api.services.getAll(),
+                api.employees.getAll(),
+                api.schedules.getAll(),
+                api.settings.get()
+            ]);
 
             // Маппим услуги: duration_minutes → duration
             const services: Service[] = (servicesData || []).map((s: any) => ({
@@ -119,16 +91,8 @@ export const useDataStore = create<DataState>((set, get) => ({
                 duration: s.duration_minutes ?? s.duration ?? 30,
             }));
 
-            // Маппим сотрудников: добавляем serviceIds
-            const employees: Employee[] = (employeesData || []).map((emp: any) => {
-                const serviceIds = (empServicesData || [])
-                    .filter((es: any) => es.employee_id === emp.id)
-                    .map((es: any) => es.service_id);
-                return {
-                    ...emp,
-                    serviceIds,
-                };
-            });
+            // Сотрудники уже приходят с serviceIds из нашего API
+            const employees: Employee[] = employeesData || [];
 
             // Маппим расписание: нормализуем формат времени (убираем секунды)
             const schedules: Schedule[] = (schedulesData || []).map((s: any) => ({
@@ -149,7 +113,7 @@ export const useDataStore = create<DataState>((set, get) => ({
                 loading: false,
             });
         } catch (error: any) {
-            console.error('Error fetching data from Supabase:', error);
+            console.error('Error fetching data from API:', error);
             set({ error: error.message, loading: false });
         }
     },

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBookingStore } from '../../../store/useBookingStore';
 import { useDataStore } from '../../../store/useDataStore';
-import { supabase } from '../../../lib/supabase';
+import { api } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { Button } from '../../ui/Button';
 import { CheckCircle2, Calendar, User, AlignLeft } from 'lucide-react';
@@ -28,14 +28,12 @@ export function Confirmation() {
     const handleConfirm = async () => {
         if (dateTime && clientDetails && selectedServices.length > 0) {
             
-            // Сохраняем в Supabase с учетом того, что у нас может быть несколько услуг
-            // Для каждой услуги создаем отдельную запись или, если БД позволяет только одну, 
-            // мы берем первую услугу и вставляем ее (упрощенная логика, так как БД имеет service_id)
+            // Сохраняем в API с учетом того, что у нас может быть несколько услуг
             const serviceIdToSave = selectedServices[0]; 
             const endDateTime = new Date(dateTime.getTime() + (currentServices.reduce((acc, s) => acc + (s.duration || 30), 0) * 60000));
             
             try {
-                const { error } = await supabase.from('appointments').insert({
+                const insertedData = await api.appointments.create({
                     client_name: clientDetails.name,
                     client_phone: clientDetails.phone,
                     appointment_date: format(dateTime, 'yyyy-MM-dd'),
@@ -46,22 +44,28 @@ export function Confirmation() {
                     actual_price: totalPrice,
                     status: 'scheduled'
                 });
-                
-                if (error) {
-                    console.error('Ошибка сохранения:', error);
-                }
+
+                // Сохраняем локально с UUID из базы для возможности отмены
+                addAppointment({
+                    date: dateTime,
+                    selectedServices,
+                    masterId,
+                    clientName: clientDetails.name,
+                    clientPhone: clientDetails.phone,
+                    // Используем UUID из базы, если доступен
+                    ...(insertedData?.id ? { dbId: insertedData.id } : {})
+                });
             } catch (err) {
                 console.error('Ошибка сохранения:', err);
+                // Сохраняем локально даже если база упала
+                addAppointment({
+                    date: dateTime,
+                    selectedServices,
+                    masterId,
+                    clientName: clientDetails.name,
+                    clientPhone: clientDetails.phone
+                });
             }
-
-            // Оставляем локальное сохранение
-            addAppointment({
-                date: dateTime,
-                selectedServices,
-                masterId,
-                clientName: clientDetails.name,
-                clientPhone: clientDetails.phone
-            });
             setIsConfirmed(true);
         }
     };

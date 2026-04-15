@@ -10,8 +10,6 @@ import {
     X
 } from 'lucide-react';
 import { useState } from 'react';
-import { supabase } from '../../lib/supabase';
-
 const NAVIGATION = [
     { name: 'Расписание', path: '/schedule', icon: Calendar },
     { name: 'Сотрудники', path: '/employees', icon: Users },
@@ -23,8 +21,9 @@ export function Layout() {
     const location = useLocation();
     const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
+    const handleLogout = () => {
+        localStorage.removeItem('auth_token');
+        window.location.href = '/login';
     };
 
     const SidebarContent = () => (

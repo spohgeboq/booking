@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lock, Mail, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { checkAuth } = useAuth();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -22,19 +24,17 @@ export function Login() {
         setLoading(true);
 
         try {
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (error) {
-                toast.error('Неправильная электронная почта или пароль');
-            } else {
-                toast.success('Успешный вход!');
-                navigate('/');
-            }
-        } catch (error) {
-            toast.error('Произошла ошибка при входе');
+            const data = await api.auth.login({ email, password });
+            localStorage.setItem('auth_token', data.token);
+            
+            // Обновляем состояние AuthContext, чтобы ProtectedRoute пропустил
+            await checkAuth();
+            
+            toast.success('Успешный вход!');
+            navigate('/schedule', { replace: true });
+        } catch (error: any) {
+            console.error('Login error:', error);
+            toast.error(error.message || 'Неправильная электронная почта или пароль');
         } finally {
             setLoading(false);
         }

@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Save, Building2, Phone, Mail, MapPin, Loader2, Image as ImageIcon, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 interface SettingsData {
-    id: string;
     company_name: string;
     phone: string;
     email: string;
@@ -28,19 +27,10 @@ export function Settings() {
     const loadSettings = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('settings')
-                .select('*')
-                .limit(1)
-                .single();
-
-            if (error && error.code !== 'PGRST116') {
-                throw error;
-            }
+            const data = await api.settings.get();
 
             if (data) {
                 setSettings({
-                    id: data.id,
                     company_name: data.company_name || '',
                     phone: data.phone || '',
                     email: data.email || '',
@@ -49,29 +39,15 @@ export function Settings() {
                     gallery: data.gallery || []
                 });
             } else {
-                // Если настроек нет, создаем дефолтную запись
-                const { data: newSettings, error: insertError } = await supabase
-                    .from('settings')
-                    .insert([{
-                        company_name: 'My Salon',
-                        phone: '',
-                        email: '',
-                        address: '',
-                        about_us_image: '',
-                        gallery: []
-                    }])
-                    .select()
-                    .single();
-
-                if (insertError) throw insertError;
+                // Если настроек нет, инициализируем пустой объект. 
+                // Бэкенд создаст запись при первом сохранении.
                 setSettings({
-                    id: newSettings.id,
-                    company_name: newSettings.company_name || '',
-                    phone: newSettings.phone || '',
-                    email: newSettings.email || '',
-                    address: newSettings.address || '',
-                    about_us_image: newSettings.about_us_image || '',
-                    gallery: newSettings.gallery || []
+                    company_name: '',
+                    phone: '',
+                    email: '',
+                    address: '',
+                    about_us_image: '',
+                    gallery: []
                 });
             }
         } catch (error: any) {
@@ -95,19 +71,7 @@ export function Settings() {
         if (!settings) return;
         setSaving(true);
         try {
-            const { error } = await supabase
-                .from('settings')
-                .update({
-                    company_name: settings.company_name,
-                    phone: settings.phone,
-                    email: settings.email,
-                    address: settings.address,
-                    about_us_image: settings.about_us_image,
-                    gallery: settings.gallery,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', settings.id);
-            if (error) throw error;
+            await api.settings.update(settings);
             toast.success('Настройки успешно сохранены');
         } catch (error: any) {
             toast.error('Не удалось сохранить настройки: ' + error.message);
@@ -121,24 +85,12 @@ export function Settings() {
         else setUploadingGallery(true);
 
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-            const filePath = `settings/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage
-                .from('images')
-                .getPublicUrl(filePath);
+            const { url } = await api.upload(file);
 
             if (type === 'about_us') {
-                setSettings(prev => prev ? { ...prev, about_us_image: data.publicUrl } : prev);
+                setSettings(prev => prev ? { ...prev, about_us_image: url } : prev);
             } else {
-                setSettings(prev => prev ? { ...prev, gallery: [...(prev.gallery || []), data.publicUrl] } : prev);
+                setSettings(prev => prev ? { ...prev, gallery: [...(prev.gallery || []), url] } : prev);
             }
             toast.success('Фото загружено');
         } catch (error: any) {

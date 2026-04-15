@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Loader2, FileText, FileSpreadsheet, File } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { format, subDays, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
@@ -43,19 +43,11 @@ export function Reports() {
         if (!startDate || !endDate) return;
         setLoading(true);
         try {
-            const startStr = format(startOfDay(parseISO(startDate)), "yyyy-MM-dd'T'HH:mm:ssXXX");
-            const endStr = format(endOfDay(parseISO(endDate)), "yyyy-MM-dd'T'HH:mm:ssXXX");
-
-            // Fetch appointments in range
-            const { data: apps, error } = await supabase
-                .from('appointments')
-                .select('id, appointment_date, status, actual_price, services(name), employees(first_name, last_name)')
-                .gte('appointment_date', startStr)
-                .lte('appointment_date', endStr);
-
-            if (error) throw error;
-
-            const appointments = apps || [];
+            // Fetch appointments in range using the new API
+            const appointments = await api.appointments.getAll({
+                start_date: startDate,
+                end_date: endDate
+            });
 
             // Calculate stats
             let totalIncome = 0;
@@ -65,7 +57,7 @@ export function Reports() {
             const serviceMap = new Map<string, number>();
             const workerMap = new Map<string, number>();
 
-            appointments.forEach((app: any) => {
+            (appointments || []).forEach((app: any) => {
                 if (app.status === 'completed') {
                     completed++;
                     totalIncome += Number(app.actual_price) || 0;
@@ -73,19 +65,19 @@ export function Reports() {
                     cancelled++;
                 }
 
-                // Daily income
+                // Daily income (only for completed)
                 if (app.status === 'completed') {
                     const d = app.appointment_date;
                     dailyMap.set(d, (dailyMap.get(d) || 0) + (Number(app.actual_price) || 0));
 
                     // Service count
-                    const servicesObj = Array.isArray(app.services) ? app.services[0] : app.services;
-                    const sName = servicesObj?.name || 'Неизвестно';
+                    const sName = app.services?.name || 'Неизвестно';
                     serviceMap.set(sName, (serviceMap.get(sName) || 0) + 1);
 
                     // Worker count
-                    const workersObj = Array.isArray(app.employees) ? app.employees[0] : app.employees;
-                    const wName = workersObj ? `${workersObj.first_name || ''} ${workersObj.last_name || ''}`.trim() : 'Без мастера';
+                    const wName = app.employees 
+                        ? `${app.employees.first_name || ''} ${app.employees.last_name || ''}`.trim() 
+                        : 'Без мастера';
                     workerMap.set(wName, (workerMap.get(wName) || 0) + 1);
                 }
             });
@@ -131,10 +123,6 @@ export function Reports() {
         setGenerating(true);
         try {
             const doc = new jsPDF();
-
-            // Fix utf-8 issues slightly by using basic fonts or relying on default (might need custom font for full RU support in jspdf if needed, but let's use standard table)
-            // Warning: default jsPDF font doesn't support Cyrillic well without adding a TTF. We'll add a simple english title or basic translit if it fails, but standard browser jsPDF might render basic chars or squares.
-            // For production, a custom VFS font like Roboto is needed.
             doc.text(`Report: ${startDate} to ${endDate}`, 14, 15);
             doc.text(`Total Income: ${data.totalIncome.toLocaleString()} KZT`, 14, 25);
             doc.text(`Completed: ${data.completedAppointments} | Cancelled: ${data.cancelledAppointments}`, 14, 32);
@@ -167,7 +155,6 @@ export function Reports() {
         try {
             const wb = XLSX.utils.book_new();
 
-            // Summary Sheet
             const summaryData = [
                 ['Отчетный период', `${startDate} - ${endDate}`],
                 ['Общий доход', data.totalIncome],
@@ -178,11 +165,9 @@ export function Reports() {
             const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
             XLSX.utils.book_append_sheet(wb, wsSummary, "Сводка");
 
-            // Services Sheet
             const wsServices = XLSX.utils.json_to_sheet(data.servicesStats);
             XLSX.utils.book_append_sheet(wb, wsServices, "Услуги");
 
-            // Workers Sheet
             const wsWorkers = XLSX.utils.json_to_sheet(data.workersStats);
             XLSX.utils.book_append_sheet(wb, wsWorkers, "Мастера");
 
@@ -387,3 +372,4 @@ export function Reports() {
         </div>
     );
 }
+
