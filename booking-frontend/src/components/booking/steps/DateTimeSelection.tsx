@@ -31,18 +31,25 @@ function timeToMinutes(time: string): number {
 }
 
 /**
+ * Конвертирует минуты от полуночи обратно в строку "HH:MM"
+ */
+function minutesToTimeStr(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+/**
  * Генерирует массив временных слотов от startTime до endTime
- * с шагом 30 минут, учитывая длительность услуги
+ * с шагом равным длительности услуги
  */
 function generateTimeSlots(startTime: string, endTime: string, duration: number): string[] {
     const startMin = timeToMinutes(startTime);
     const endMin = timeToMinutes(endTime);
     const slots: string[] = [];
 
-    for (let m = startMin; m + duration <= endMin; m += 30) {
-        const h = Math.floor(m / 60);
-        const min = m % 60;
-        slots.push(`${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
+    for (let m = startMin; m + duration <= endMin; m += duration) {
+        slots.push(minutesToTimeStr(m));
     }
 
     return slots;
@@ -96,7 +103,7 @@ export function DateTimeSelection() {
     const totalDuration = useMemo(() => {
         return services
             .filter(s => selectedServices.includes(s.id))
-            .reduce((acc, s) => acc + (s.duration_minutes || 30), 0) || 30; // 30 минут по умолчанию
+            .reduce((acc, s) => acc + (Number(s.duration_minutes) || 30), 0) || 30; // 30 минут по умолчанию
     }, [services, selectedServices]);
 
     // Получаем расписание выбранного мастера
@@ -376,19 +383,23 @@ export function DateTimeSelection() {
 
             {/* Слоты времени */}
             {availableTimeSlots.length > 0 ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                    {availableTimeSlots.map((time) => (
-                        <button
-                            key={time}
-                            onClick={() => setSelectedTime(time)}
-                            className={`p-3 rounded-xl transition-all font-medium text-sm ${selectedTime === time
-                                ? 'bg-brand text-white shadow-glow border border-brand'
-                                : 'glass text-text-secondary border-transparent hover:text-white hover:border-brand/30'
-                                }`}
-                        >
-                            {time}
-                        </button>
-                    ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {availableTimeSlots.map((time) => {
+                        const endMinutes = timeToMinutes(time) + totalDuration;
+                        const endTime = minutesToTimeStr(endMinutes);
+                        return (
+                            <button
+                                key={time}
+                                onClick={() => setSelectedTime(time)}
+                                className={`p-3 rounded-xl transition-all font-medium text-sm ${selectedTime === time
+                                    ? 'bg-brand text-white shadow-glow border border-brand'
+                                    : 'glass text-text-secondary border-transparent hover:text-white hover:border-brand/30'
+                                    }`}
+                            >
+                                {time} – {endTime}
+                            </button>
+                        );
+                    })}
                 </div>
             ) : (
                 <motion.div

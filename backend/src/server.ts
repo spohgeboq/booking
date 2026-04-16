@@ -48,6 +48,35 @@ app.use('/api/schedules', schedulesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/upload', uploadRoutes);
 
+// --- POST endpoint для Telegram уведомлений о новой записи ---
+app.post('/api/notify-booking', async (req, res) => {
+    const { client_name, client_phone, service_name, master_name, appointment_date, start_time, end_time, total_price } = req.body;
+    console.log('notify-booking received:', req.body);
+    try {
+        if (bot && groupId) {
+            const message = [
+                '📋 Новая запись от клиента!',
+                '',
+                '👤 Клиент: ' + (client_name || 'Не указан'),
+                '📞 Телефон: ' + (client_phone || 'Не указан'),
+                '💼 Услуга: ' + (service_name || 'Не указана'),
+                '👷 Мастер: ' + (master_name || 'Не указан'),
+                '📅 Дата: ' + (appointment_date || 'Не указана'),
+                '⏰ Время: ' + ((start_time || '').substring(0, 5) || '?') + ' - ' + ((end_time || '').substring(0, 5) || '?'),
+                ...(total_price ? ['💰 Сумма: ' + total_price + ' ₸'] : []),
+                '',
+                '✅ Запись добавлена автоматически через онлайн-бронирование.',
+            ].join('\n');
+            await bot.telegram.sendMessage(groupId, message);
+            console.log('Booking notification sent successfully');
+        }
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Telegram send error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- POST endpoint для Telegram уведомлений об удалении ---
 app.post('/api/notify-deletion', async (req, res) => {
     const { client_name, client_phone, service_name, master_name, appointment_date, start_time, end_time } = req.body;

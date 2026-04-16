@@ -55,5 +55,10 @@ export const api = {
             method: 'POST',
             body: JSON.stringify(data),
         }),
+        // Для уведомления о новой записи
+        notifyBooking: (data: any) => fetchPublic('/api/notify-booking', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
     }
 };

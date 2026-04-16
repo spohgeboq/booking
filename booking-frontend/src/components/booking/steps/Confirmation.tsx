@@ -16,8 +16,8 @@ export function Confirmation() {
     const currentServices = services.filter(s => selectedServices.includes(s.id));
     const selectedMaster = employees.find(m => m.id === masterId);
 
-    // Считаем общую сумму
-    const totalPrice = currentServices.reduce((acc, s) => acc + (s.price || 0), 0);
+    // Считаем общую сумму (Number() т.к. price приходит из БД как строка)
+    const totalPrice = currentServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
 
     const handleClose = () => {
         closeBooking();
@@ -30,7 +30,7 @@ export function Confirmation() {
             
             // Сохраняем в API с учетом того, что у нас может быть несколько услуг
             const serviceIdToSave = selectedServices[0]; 
-            const endDateTime = new Date(dateTime.getTime() + (currentServices.reduce((acc, s) => acc + (s.duration || 30), 0) * 60000));
+            const endDateTime = new Date(dateTime.getTime() + (currentServices.reduce((acc, s) => acc + (Number(s.duration_minutes) || 30), 0) * 60000));
             
             try {
                 const insertedData = await api.appointments.create({
@@ -55,6 +55,19 @@ export function Confirmation() {
                     // Используем UUID из базы, если доступен
                     ...(insertedData?.id ? { dbId: insertedData.id } : {})
                 });
+
+                // Отправляем Telegram-уведомление админу (в фоне, не блокируем UX)
+                api.appointments.notifyBooking({
+                    client_name: clientDetails.name,
+                    client_phone: clientDetails.phone,
+                    service_name: currentServices.map(s => s.name).join(', '),
+                    master_name: selectedMaster ? `${selectedMaster.first_name} ${selectedMaster.last_name}`.trim() : 'Любой свободный',
+                    appointment_date: format(dateTime, 'yyyy-MM-dd'),
+                    start_time: format(dateTime, 'HH:mm:ss'),
+                    end_time: format(endDateTime, 'HH:mm:ss'),
+                    total_price: totalPrice > 0 ? totalPrice.toLocaleString('ru-RU') : null,
+                }).catch(err => console.error('Ошибка отправки уведомления:', err));
+
             } catch (err) {
                 console.error('Ошибка сохранения:', err);
                 // Сохраняем локально даже если база упала
@@ -155,7 +168,7 @@ export function Confirmation() {
                         <div key={service.id} className="flex items-center justify-between text-white text-sm bg-white/[0.03] p-3 rounded-xl border border-white/5">
                             <span className="font-medium">{service.name}</span>
                             <div className="flex items-center gap-4">
-                                <span className="text-brand-light font-medium">{service.price?.toLocaleString('ru-RU')} ₸</span>
+                                <span className="text-brand-light font-medium">{Number(service.price || 0).toLocaleString('ru-RU')} ₸</span>
                                 <button
                                     onClick={() => handleRemoveService(service.id)}
                                     className="text-text-muted hover:text-red-400 transition-colors p-1"
