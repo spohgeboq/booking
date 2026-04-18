@@ -1,19 +1,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import {
-    format,
-    addMonths,
-    subMonths,
-    startOfMonth,
-    endOfMonth,
-    startOfWeek,
-    endOfWeek,
-    isSameMonth,
-    isSameDay,
-    addDays
+    format, addMonths, subMonths, startOfMonth, endOfMonth,
+    startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, X, DollarSign, Users, XCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 
 interface AppointmentRecord {
     id: string;
@@ -21,12 +15,16 @@ interface AppointmentRecord {
     start_time: string;
     status: string;
     client_name: string;
+    actual_price?: number;
+    services?: { name: string; price: number };
+    employees?: { first_name: string; last_name: string };
 }
 
 export function CalendarView() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
     const [loading, setLoading] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
     useEffect(() => {
         fetchAppointmentsForMonth(currentDate);
@@ -44,8 +42,9 @@ export function CalendarView() {
             });
 
             setAppointments(data as AppointmentRecord[]);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching calendar appointments:', error);
+            toast.error('Ошибка загрузки календаря');
         } finally {
             setLoading(false);
         }
@@ -54,30 +53,113 @@ export function CalendarView() {
     const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
     const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
 
-    const renderHeader = () => {
-        return (
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-neutral-text1 flex items-center capitalize gap-3">
-                    <button onClick={prevMonth} className="p-2 hover:bg-neutral-bg3 rounded-full transition-colors text-neutral-text2 hover:text-white">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    {format(currentDate, 'LLLL yyyy', { locale: ru })}
-                    <button onClick={nextMonth} className="p-2 hover:bg-neutral-bg3 rounded-full transition-colors text-neutral-text2 hover:text-white">
-                        <ChevronRight className="w-5 h-5" />
-                    </button>
-                </h2>
-                <div className="flex gap-2 text-sm">
-                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-blue-400"></div> Ожидают</div>
-                    <div className="flex items-center gap-1.5 ml-2"><div className="w-3 h-3 rounded-full bg-green-400"></div> Завершено</div>
-                </div>
-            </div>
-        );
+    // Stats
+    const currentMonthAppointments = appointments.filter(a => isSameMonth(new Date(a.appointment_date), currentDate));
+    const totalVisits = currentMonthAppointments.filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status)).length;
+    const totalRevenue = currentMonthAppointments.filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status)).reduce((acc, a) => acc + (Number(a.actual_price) || Number(a.services?.price) || 0), 0);
+    const totalCancellations = currentMonthAppointments.filter(a => a.status === 'cancelled').length;
+
+    const getHeatmapColor = (count: number, isCurrentMonth: boolean) => {
+        if (!isCurrentMonth) return 'bg-neutral-bg3/10 opacity-30';
+        if (count === 0) return 'bg-neutral-bg3/20 border-transparent';
+        if (count <= 2) return 'bg-brand/20 border-brand/30 text-brand-light';
+        if (count <= 5) return 'bg-brand/40 border-brand/50 text-white';
+        if (count <= 8) return 'bg-brand/60 border-brand/70 text-white font-bold';
+        return 'bg-brand/80 border-brand text-white font-bold';
     };
 
-    const renderDays = () => {
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'completed': return 'bg-green-400/10 text-green-400 border-green-400/20';
+            case 'confirmed': return 'bg-blue-400/10 text-blue-400 border-blue-400/20';
+            case 'cancelled': return 'bg-red-400/10 text-red-400 border-red-400/20 line-through opacity-70';
+            default: return 'bg-yellow-400/10 text-yellow-500 border-yellow-400/20';
+        }
+    };
+
+    // Drag and Drop
+    const handleDragStart = (e: React.DragEvent, appointmentId: string) => {
+        e.dataTransfer.setData('appointmentId', appointmentId);
+        // Optional: add custom drag image or styling
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = async (e: React.DragEvent, dropDate: Date) => {
+        e.preventDefault();
+        const appointmentId = e.dataTransfer.getData('appointmentId');
+        if (!appointmentId) return;
+
+        const newDateStr = format(dropDate, 'yyyy-MM-dd');
+        const appointment = appointments.find(a => a.id === appointmentId);
+        
+        if (!appointment) return;
+        if (format(new Date(appointment.appointment_date), 'yyyy-MM-dd') === newDateStr) return; // same day
+
+        try {
+            // Optimistic Update
+            setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, appointment_date: newDateStr } : a));
+            
+            await api.appointments.update(appointmentId, { appointment_date: newDateStr });
+            toast.success('Запись перенесена');
+        } catch (err: any) {
+            toast.error('Не удалось перенести запись');
+            fetchAppointmentsForMonth(currentDate); // Revert
+        }
+    };
+
+    const renderDashboard = () => (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                    <p className="text-sm text-neutral-text2 font-medium">Всего визитов</p>
+                    <p className="text-2xl font-bold text-white mt-1">{totalVisits}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-blue-400" />
+                </div>
+            </div>
+            <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                    <p className="text-sm text-neutral-text2 font-medium">Выручка (примерно)</p>
+                    <p className="text-2xl font-bold text-brand-light mt-1">{totalRevenue.toLocaleString('ru-RU')} ₸</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-brand" />
+                </div>
+            </div>
+            <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">
+                <div>
+                    <p className="text-sm text-neutral-text2 font-medium">Отмены</p>
+                    <p className="text-2xl font-bold text-red-400 mt-1">{totalCancellations}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <XCircle className="w-5 h-5 text-red-500" />
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderHeader = () => (
+        <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-neutral-text1 flex items-center capitalize gap-3">
+                <button onClick={prevMonth} className="p-2 hover:bg-neutral-bg3 rounded-full transition-colors text-neutral-text2 hover:text-white">
+                    <ChevronLeft className="w-5 h-5" />
+                </button>
+                {format(currentDate, 'LLLL yyyy', { locale: ru })}
+                <button onClick={nextMonth} className="p-2 hover:bg-neutral-bg3 rounded-full transition-colors text-neutral-text2 hover:text-white">
+                    <ChevronRight className="w-5 h-5" />
+                </button>
+            </h2>
+        </div>
+    );
+
+    const renderDaysContext = () => {
         const days = [];
         const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
-
         for (let i = 0; i < 7; i++) {
             days.push(
                 <div key={i} className="text-center font-medium text-sm text-neutral-text3 uppercase tracking-wider py-3 border-b border-neutral-border">
@@ -94,59 +176,44 @@ export function CalendarView() {
         const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
         const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
-        const dateFormat = 'd';
         const rows = [];
         let days = [];
         let day = startDate;
-        let formattedDate = '';
 
         while (day <= endDate) {
             for (let i = 0; i < 7; i++) {
-                formattedDate = format(day, dateFormat);
-
-                const isCurrentMonth = isSameMonth(day, monthStart);
-                const isToday = isSameDay(day, new Date());
-                const dayStr = format(day, 'yyyy-MM-dd');
+                const currentIterationDay = day; // for closure
+                const formattedDate = format(currentIterationDay, 'd');
+                const isCurrentMonth = isSameMonth(currentIterationDay, monthStart);
+                const isToday = isSameDay(currentIterationDay, new Date());
+                const dayStr = format(currentIterationDay, 'yyyy-MM-dd');
+                const isSelected = selectedDate && isSameDay(currentIterationDay, selectedDate);
 
                 const dayAppointments = appointments.filter(a => format(new Date(a.appointment_date), 'yyyy-MM-dd') === dayStr);
-
-                // Show max 3 appointments per day in the tiny box
-                const displayedApps = dayAppointments.slice(0, 3);
-                const moreCount = dayAppointments.length - 3;
+                const count = dayAppointments.length;
 
                 days.push(
                     <div
-                        key={day.toString()}
-                        className={`min-h-[120px] p-2 border-b border-r border-neutral-border/50 relative group transition-colors hover:bg-neutral-bg3/20 cursor-pointer
-                            ${!isCurrentMonth ? 'bg-neutral-bg3/10 opacity-60' : ''}
+                        key={currentIterationDay.toString()}
+                        onClick={() => setSelectedDate(currentIterationDay)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, currentIterationDay)}
+                        className={`h-24 md:h-32 p-2 border-b border-r border-neutral-border/50 relative transition-all cursor-pointer flex flex-col hover:border-brand/50
+                            ${isSelected ? 'ring-2 ring-brand ring-inset bg-brand/5' : ''}
+                            ${getHeatmapColor(count, isCurrentMonth)}
                             ${i === 6 ? 'border-r-0' : ''}`}
                     >
-                        <div className="flex justify-between items-start">
-                            <span className={`flex items-center justify-center w-7 h-7 text-sm rounded-full ${isToday ? 'bg-primary text-white font-bold shadow-md' : 'text-neutral-text2'}`}>
-                                {formattedDate}
-                            </span>
-                        </div>
-
-                        <div className="mt-2 flex flex-col gap-1.5 overflow-hidden">
-                            {displayedApps.map(app => {
-                                const isCompleted = app.status === 'completed';
-                                const isCancelled = app.status === 'cancelled';
-                                const colorClass = isCompleted ? 'bg-green-400/10 text-green-400 border-green-400/20' :
-                                    isCancelled ? 'bg-red-400/10 text-red-500 border-red-400/20 line-through opacity-70' :
-                                        'bg-blue-400/10 text-blue-400 border-blue-400/20';
-
-                                return (
-                                    <div key={app.id} className={`text-[10px] px-1.5 py-1 rounded border truncate font-medium ${colorClass}`} title={`${app.start_time.substring(0, 5)} - ${app.client_name}`}>
-                                        {app.start_time.substring(0, 5)} {app.client_name}
-                                    </div>
-                                );
-                            })}
-                            {moreCount > 0 && (
-                                <div className="text-[10px] text-neutral-text3 font-medium px-1">
-                                    Ещё {moreCount}...
-                                </div>
-                            )}
-                        </div>
+                        <span className={`block w-7 h-7 text-sm rounded-full flex items-center justify-center ${isToday ? 'bg-primary text-white font-bold shadow-md' : ''}`}>
+                            {formattedDate}
+                        </span>
+                        
+                        {count > 0 && isCurrentMonth && (
+                            <div className="mt-auto self-end md:self-center pb-1">
+                                <span className="text-xs md:text-xl font-bold opacity-90 drop-shadow-sm">
+                                    {count} {count === 1 ? 'запись' : count < 5 ? 'записи' : 'записей'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 );
                 day = addDays(day, 1);
@@ -161,17 +228,100 @@ export function CalendarView() {
         return <div>{rows}</div>;
     };
 
-    return (
-        <div className="flex flex-col h-full bg-neutral-bg2 rounded-xl border border-neutral-border p-6 relative">
-            {loading && (
-                <div className="absolute inset-0 bg-neutral-bg1/50 backdrop-blur-[2px] z-10 flex items-center justify-center rounded-xl">
-                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+    const renderSideDrawer = () => {
+        if (!selectedDate) return null;
+        const dayStr = format(selectedDate, 'yyyy-MM-dd');
+        const dayAppointments = appointments.filter(a => format(new Date(a.appointment_date), 'yyyy-MM-dd') === dayStr);
+        
+        return (
+            <motion.div
+                initial={{ x: '100%', opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: '100%', opacity: 0 }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+                className="absolute right-0 top-0 bottom-0 w-80 md:w-96 bg-neutral-bg2/95 backdrop-blur-3xl border-l border-neutral-border shadow-2xl z-20 flex flex-col rounded-r-xl overflow-hidden"
+            >
+                <div className="p-5 border-b border-neutral-border flex justify-between items-center bg-neutral-bg3/30">
+                    <div>
+                        <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                            <CalendarIcon className="w-5 h-5 text-brand" />
+                            {format(selectedDate, 'd MMMM', { locale: ru })}
+                        </h3>
+                        <p className="text-sm text-neutral-text2 mt-1">{dayAppointments.length} записей</p>
+                    </div>
+                    <button 
+                        onClick={() => setSelectedDate(null)} 
+                        className="p-2 hover:bg-white/10 rounded-full text-neutral-text2 hover:text-white transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
                 </div>
-            )}
-            {renderHeader()}
-            <div className="flex-1 bg-neutral-bg3/20 border border-neutral-border rounded-xl overflow-hidden shadow-inner">
-                {renderDays()}
-                {renderCells()}
+                
+                <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-3 custom-scrollbar">
+                    {dayAppointments.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center text-center h-40 text-neutral-text3">
+                            <CalendarIcon className="w-10 h-10 opacity-20 mb-3" />
+                            <p>На этот день записей нет</p>
+                        </div>
+                    ) : (
+                        dayAppointments.sort((a, b) => a.start_time.localeCompare(b.start_time)).map(app => (
+                            <div 
+                                key={app.id} 
+                                draggable 
+                                onDragStart={(e) => handleDragStart(e, app.id)}
+                                className={`p-4 rounded-xl border cursor-grab active:cursor-grabbing backdrop-blur-sm shadow flex flex-col gap-2 transition-transform hover:scale-[1.02] ${getStatusColor(app.status)}`}
+                                title="Перетащите карточку на другой день в календаре, чтобы изменить дату"
+                            >
+                                <div className="flex justify-between items-start">
+                                    <span className="font-bold text-sm">{app.client_name}</span>
+                                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-black/20">
+                                        {app.start_time.substring(0, 5)}
+                                    </span>
+                                </div>
+                                <div className="text-sm opacity-90 truncate">
+                                    {app.services?.name || 'Услуга'}
+                                </div>
+                                <div className="flex justify-between items-center text-xs opacity-70 mt-1">
+                                    <span>{app.employees ? `${app.employees.first_name} ${app.employees.last_name}` : 'Любой мастер'}</span>
+                                    {app.actual_price ? <span className="font-bold">{app.actual_price.toLocaleString('ru-RU')} ₸</span> : null}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+                {/* Drag hint */}
+                {dayAppointments.length > 0 && (
+                    <div className="p-3 text-center text-xs text-neutral-text3 bg-neutral-bg3/20 border-t border-neutral-border">
+                        Совет: перетащите карточку на другой день, чтобы быстро изменить дату записи
+                    </div>
+                )}
+            </motion.div>
+        );
+    };
+
+    return (
+        <div className="flex flex-col h-full relative">
+            {renderDashboard()}
+            
+            <div className="flex flex-col h-full bg-neutral-bg2 rounded-xl border border-neutral-border p-6 relative overflow-hidden">
+                {loading && (
+                    <div className="absolute inset-0 bg-neutral-bg1/50 backdrop-blur-[2px] z-10 flex items-center justify-center rounded-xl">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    </div>
+                )}
+                
+                {renderHeader()}
+                
+                <div className="flex-1 bg-neutral-bg3/20 border border-neutral-border rounded-xl  shadow-inner relative grid grid-rows-[auto_1fr]">
+                    {renderDaysContext()}
+                    <div className="relative overflow-hidden w-full h-full pb-1">
+                        {renderCells()}
+                    </div>
+                </div>
+
+                <AnimatePresence>
+                    {renderSideDrawer()}
+                </AnimatePresence>
             </div>
         </div>
     );
