@@ -108,7 +108,7 @@ export function CalendarView() {
                 const isToday = isSameDay(day, new Date());
                 const dayStr = format(day, 'yyyy-MM-dd');
 
-                const dayAppointments = appointments.filter(a => a.appointment_date === dayStr);
+                const dayAppointments = appointments.filter(a => format(new Date(a.appointment_date), 'yyyy-MM-dd') === dayStr);
 
                 // Show max 3 appointments per day in the tiny box
                 const displayedApps = dayAppointments.slice(0, 3);

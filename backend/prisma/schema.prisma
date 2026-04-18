@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model admin_users {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String    @unique
+  password_hash String
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model appointments {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_name       String
+  client_phone      String?
+  service_id        String?             @db.Uuid
+  employee_id       String?             @db.Uuid
+  appointment_date  DateTime            @db.Date
+  start_time        DateTime            @db.Time(6)
+  end_time          DateTime            @db.Time(6)
+  status            appointment_status? @default(scheduled)
+  cancel_reason     String?
+  actual_price      Decimal?            @db.Decimal
+  commission_earned Decimal?            @db.Decimal
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  employees         employees?          @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  services          services?           @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model employee_services {
+  employee_id String    @db.Uuid
+  service_id  String    @db.Uuid
+  employees   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  services    services  @relation(fields: [service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([employee_id, service_id])
+}
+
+model employees {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name        String
+  last_name         String
+  position          String?
+  phone             String?
+  email             String?
+  address           String?
+  experience_years  Int?                @default(0)
+  specialization    String?
+  certificates      String?
+  avatar_url        String?
+  commission_type   commission_type?
+  commission_value  Decimal?            @db.Decimal
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  image_url         String?
+  appointments      appointments[]
+  employee_services employee_services[]
+  schedules         schedules[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model schedules {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  employee_id String?    @db.Uuid
+  day_of_week Int
+  start_time  DateTime?  @db.Time(6)
+  end_time    DateTime?  @db.Time(6)
+  is_working  Boolean?   @default(true)
+  created_at  DateTime?  @default(now()) @db.Timestamptz(6)
+  break_start DateTime?  @db.Time(6)
+  break_end   DateTime?  @db.Time(6)
+  employees   employees? @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model services {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String
+  description       String?
+  price             Decimal?            @default(0.00) @db.Decimal
+  duration_minutes  Int?                @default(30)
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  category          String?
+  image_url         String?
+  appointments      appointments[]
+  employee_services employee_services[]
+}
+
+model settings {
+  id                       String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_name             String?          @default("Моя Компания")
+  phone                    String?
+  email                    String?
+  address                  String?
+  working_hours            String?
+  logo_url                 String?
+  default_commission_type  commission_type? @default(percentage)
+  default_commission_value Decimal?         @default(30.00) @db.Decimal
+  telegram_report_enabled  Boolean?         @default(false)
+  daily_report_enabled     Boolean?         @default(false)
+  created_at               DateTime?        @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?        @default(now()) @db.Timestamptz(6)
+  gallery                  String[]
+  about_us_image           String?
+  telegram_chat_id         String?
+}
+
+enum appointment_status {
+  scheduled
+  confirmed
+  completed
+  cancelled
+}
+
+enum commission_type {
+  percentage
+  fixed
+}

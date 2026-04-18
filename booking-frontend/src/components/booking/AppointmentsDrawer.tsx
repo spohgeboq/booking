@@ -128,7 +128,7 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
                                     const currentServices = services.filter(s => aptServiceIds.includes(s.id));
                                     const master = employees.find(m => m.id === apt.masterId);
                                     const aptDate = new Date(apt.date);
-                                    const totalPrice = currentServices.reduce((acc, s) => acc + (s.price || 0), 0);
+                                    const totalPrice = currentServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
 
                                     return (
                                         <motion.div
