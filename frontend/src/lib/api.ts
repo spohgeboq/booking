@@ -91,6 +91,10 @@ export const api = {
             method: 'POST',
             body: JSON.stringify(data),
         }),
+        notifyReschedule: (data: any) => fetchWithAuth('/api/notify-reschedule', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
     },
     schedules: {
         getAll: (params?: any) => {

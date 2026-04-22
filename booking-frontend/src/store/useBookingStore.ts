@@ -44,10 +44,12 @@ interface BookingState {
     setDateTime: (date: Date) => void;
     setClientDetails: (details: { name: string; phone: string }) => void;
     startBookingWithMaster: (masterId: string, serviceIds: string[]) => void;
+    startBookingWithService: (serviceId: string) => void;
     resetBooking: () => void;
 
     addAppointment: (apt: Omit<Appointment, 'id' | 'status'>) => void;
     removeAppointment: (id: string) => void;
+    updateAppointment: (id: string, changes: Partial<Appointment>) => void;
 }
 
 export const useBookingStore = create<BookingState>()(
@@ -91,6 +93,14 @@ export const useBookingStore = create<BookingState>()(
                 dateTime: null,
                 clientDetails: null
             }),
+            startBookingWithService: (serviceId) => set({
+                selectedServices: [serviceId],
+                currentStep: 'MASTER_SELECTION',
+                isOpen: true,
+                masterId: null,
+                dateTime: null,
+                clientDetails: null
+            }),
             resetBooking: () => set({
                 currentStep: 'SERVICE_SELECTION',
                 selectedServices: [],
@@ -103,6 +113,9 @@ export const useBookingStore = create<BookingState>()(
             })),
             removeAppointment: (id) => set((state) => ({
                 appointments: state.appointments.filter(a => a.id !== id)
+            })),
+            updateAppointment: (id, changes) => set((state) => ({
+                appointments: state.appointments.map(a => a.id === id ? { ...a, ...changes } : a)
             }))
         }),
         {

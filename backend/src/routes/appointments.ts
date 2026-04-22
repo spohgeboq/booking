@@ -71,6 +71,33 @@ router.get('/', async (req, res) => {
     }
 });
 
+// GET /api/appointments/:id — получить одну запись по ID
+router.get('/:id', async (req, res) => {
+    try {
+        const result = await query(
+            `SELECT a.*, 
+                    s.name as service_name, s.price as service_price,
+                    e.first_name as employee_first_name, e.last_name as employee_last_name
+             FROM appointments a
+             LEFT JOIN services s ON a.service_id = s.id
+             LEFT JOIN employees e ON a.employee_id = e.id
+             WHERE a.id = $1`,
+            [req.params.id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Запись не найдена' });
+        }
+        const row = result.rows[0];
+        res.json({
+            ...row,
+            services: { name: row.service_name, price: row.service_price },
+            employees: { first_name: row.employee_first_name, last_name: row.employee_last_name }
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // POST /api/appointments — создать запись
 router.post('/', async (req, res) => {
     const { client_name, client_phone, service_id, employee_id,
@@ -90,7 +117,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT /api/appointments/:id — обновить запись
+// PUT /api/appointments/:id — обновить запись (возвращает полные данные с JOIN)
 router.put('/:id', async (req, res) => {
     const fields = req.body;
     try {
@@ -105,15 +132,39 @@ router.put('/:id', async (req, res) => {
         const values = keys.map(k => fields[k]);
         values.push(req.params.id);
 
-        const result = await query(
+        const updateResult = await query(
             `UPDATE appointments SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING *`,
             values
         );
 
-        if (result.rows.length === 0) {
+        if (updateResult.rows.length === 0) {
             return res.status(404).json({ error: 'Запись не найдена' });
         }
-        res.json(result.rows[0]);
+
+        // Возвращаем полные данные с JOIN, как в GET-запросе
+        const fullResult = await query(
+            `SELECT a.*, 
+                    s.name as service_name, s.price as service_price,
+                    e.first_name as employee_first_name, e.last_name as employee_last_name
+             FROM appointments a
+             LEFT JOIN services s ON a.service_id = s.id
+             LEFT JOIN employees e ON a.employee_id = e.id
+             WHERE a.id = $1`,
+            [req.params.id]
+        );
+
+        if (fullResult.rows.length === 0) {
+            return res.json(updateResult.rows[0]);
+        }
+
+        const row = fullResult.rows[0];
+        const appointment = {
+            ...row,
+            services: { name: row.service_name, price: row.service_price },
+            employees: { first_name: row.employee_first_name, last_name: row.employee_last_name }
+        };
+
+        res.json(appointment);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

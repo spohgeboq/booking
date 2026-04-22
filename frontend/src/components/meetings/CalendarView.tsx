@@ -93,21 +93,49 @@ export function CalendarView() {
         const appointmentId = e.dataTransfer.getData('appointmentId');
         if (!appointmentId) return;
 
+        // Запрет переноса на прошедшую дату
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dropDate < today) {
+            toast.error('Нельзя перенести запись на прошедшую дату');
+            return;
+        }
+
         const newDateStr = format(dropDate, 'yyyy-MM-dd');
         const appointment = appointments.find(a => a.id === appointmentId);
         
         if (!appointment) return;
-        if (format(new Date(appointment.appointment_date), 'yyyy-MM-dd') === newDateStr) return; // same day
+        const oldDateStr = format(new Date(appointment.appointment_date), 'yyyy-MM-dd');
+        if (oldDateStr === newDateStr) return; // та же дата
 
         try {
-            // Optimistic Update
+            // Оптимистичное обновление UI
             setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, appointment_date: newDateStr } : a));
             
-            await api.appointments.update(appointmentId, { appointment_date: newDateStr });
-            toast.success('Запись перенесена');
+            // Обновляем запись на бэкенде — ответ содержит полные данные с JOIN
+            const updatedAppointment = await api.appointments.update(appointmentId, { appointment_date: newDateStr });
+            
+            // Синхронизируем state с реальными данными из БД
+            setAppointments(prev => prev.map(a => a.id === appointmentId ? updatedAppointment : a));
+            
+            toast.success(`Запись перенесена на ${format(dropDate, 'd MMMM', { locale: ru })}`);
+
+            // Отправляем Telegram-уведомление
+            api.appointments.notifyReschedule({
+                client_name: appointment.client_name,
+                client_phone: (appointment as any).client_phone || '',
+                service_name: appointment.services?.name || 'Услуга',
+                master_name: appointment.employees
+                    ? `${appointment.employees.first_name} ${appointment.employees.last_name}`.trim()
+                    : 'Не указан',
+                old_date: oldDateStr,
+                new_date: newDateStr,
+                start_time: appointment.start_time,
+            }).catch((err: any) => console.warn('Telegram notify failed:', err));
+
         } catch (err: any) {
             toast.error('Не удалось перенести запись');
-            fetchAppointmentsForMonth(currentDate); // Revert
+            fetchAppointmentsForMonth(currentDate); // Откатываем
         }
     };
 
@@ -176,6 +204,10 @@ export function CalendarView() {
         const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
         const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
+        // Сегодня без времени для сравнения
+        const todayMidnight = new Date();
+        todayMidnight.setHours(0, 0, 0, 0);
+
         const rows = [];
         let days = [];
         let day = startDate;
@@ -186,6 +218,7 @@ export function CalendarView() {
                 const formattedDate = format(currentIterationDay, 'd');
                 const isCurrentMonth = isSameMonth(currentIterationDay, monthStart);
                 const isToday = isSameDay(currentIterationDay, new Date());
+                const isPast = currentIterationDay < todayMidnight; // прошедшая дата
                 const dayStr = format(currentIterationDay, 'yyyy-MM-dd');
                 const isSelected = selectedDate && isSameDay(currentIterationDay, selectedDate);
 
@@ -196,14 +229,15 @@ export function CalendarView() {
                     <div
                         key={currentIterationDay.toString()}
                         onClick={() => setSelectedDate(currentIterationDay)}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, currentIterationDay)}
-                        className={`h-24 md:h-32 p-2 border-b border-r border-neutral-border/50 relative transition-all cursor-pointer flex flex-col hover:border-brand/50
+                        onDragOver={isPast ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } : handleDragOver}
+                        onDrop={isPast ? (e) => { e.preventDefault(); toast.error('Нельзя перенести запись на прошедшую дату'); } : (e) => handleDrop(e, currentIterationDay)}
+                        className={`h-24 md:h-32 p-2 border-b border-r border-neutral-border/50 relative transition-all flex flex-col
+                            ${isPast ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:border-brand/50'}
                             ${isSelected ? 'ring-2 ring-brand ring-inset bg-brand/5' : ''}
                             ${getHeatmapColor(count, isCurrentMonth)}
                             ${i === 6 ? 'border-r-0' : ''}`}
                     >
-                        <span className={`block w-7 h-7 text-sm rounded-full flex items-center justify-center ${isToday ? 'bg-primary text-white font-bold shadow-md' : ''}`}>
+                        <span className={`block w-7 h-7 text-sm rounded-full flex items-center justify-center ${isToday ? 'bg-primary text-white font-bold shadow-md' : ''} ${isPast && !isToday ? 'text-neutral-text3 line-through' : ''}`}>
                             {formattedDate}
                         </span>
                         
@@ -213,6 +247,11 @@ export function CalendarView() {
                                     {count} {count === 1 ? 'запись' : count < 5 ? 'записи' : 'записей'}
                                 </span>
                             </div>
+                        )}
+
+                        {/* Индикатор прошедшего дня */}
+                        {isPast && isCurrentMonth && (
+                            <div className="absolute inset-0 pointer-events-none rounded-sm" style={{ background: 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(0,0,0,0.04) 4px, rgba(0,0,0,0.04) 5px)' }} />
                         )}
                     </div>
                 );

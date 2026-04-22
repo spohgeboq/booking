@@ -131,6 +131,35 @@ app.post('/api/notify-client-cancel', async (req, res) => {
     }
 });
 
+// --- POST endpoint для Telegram уведомлений о переносе записи администратором ---
+app.post('/api/notify-reschedule', async (req, res) => {
+    const { client_name, client_phone, service_name, master_name, old_date, new_date, start_time } = req.body;
+    console.log('notify-reschedule received:', req.body);
+    try {
+        if (bot && groupId) {
+            const message = [
+                '📅 Запись перенесена администратором!',
+                '',
+                '👤 Клиент: ' + (client_name || 'Не указан'),
+                '📞 Телефон: ' + (client_phone || 'Не указан'),
+                '💼 Услуга: ' + (service_name || 'Не указана'),
+                '👷 Мастер: ' + (master_name || 'Не указан'),
+                '📆 Старая дата: ' + (old_date || 'Не указана'),
+                '📅 Новая дата: ' + (new_date || 'Не указана'),
+                '⏰ Время: ' + ((start_time || '').substring(0, 5) || '?'),
+                '',
+                '✏️ Изменение внесено через панель администратора.',
+            ].join('\n');
+            await bot.telegram.sendMessage(groupId, message);
+            console.log('Reschedule notification sent successfully');
+        }
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Telegram send error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Хелперы для работы со временем ---
 function timeToMinutes(time: string): number {
     const parts = time.split(':');

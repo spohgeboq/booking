@@ -6,7 +6,7 @@ import { Clock } from 'lucide-react';
 
 export default function Services() {
     const { services } = useDataStore();
-    const openBooking = useBookingStore(state => state.openBooking);
+    const startBookingWithService = useBookingStore(state => state.startBookingWithService);
 
     // Группируем услуги по категориям
     const groupedServices = services.reduce((acc, service) => {
@@ -79,7 +79,7 @@ export default function Services() {
                                             </p>
                                             <Button
                                                 className="w-full bg-brand/10 text-brand-light hover:bg-brand hover:text-white border-none mt-auto"
-                                                onClick={openBooking}
+                                                onClick={() => startBookingWithService(service.id)}
                                             >
                                                 Записаться
                                             </Button>

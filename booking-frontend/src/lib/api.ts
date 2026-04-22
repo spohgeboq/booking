@@ -43,6 +43,7 @@ export const api = {
             const query = params ? `?${new URLSearchParams(params)}` : '';
             return fetchPublic(`/api/appointments${query}`);
         },
+        getOne: (id: string) => fetchPublic(`/api/appointments/${id}`),
         create: (data: any) => fetchPublic('/api/appointments', {
             method: 'POST',
             body: JSON.stringify(data),

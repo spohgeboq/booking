@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { X, Calendar, User, Trash2, MapPin, Clock } from 'lucide-react';
+import { X, Calendar, User, Trash2, MapPin, Clock, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useBookingStore } from '../../store/useBookingStore';
 import { useDataStore } from '../../store/useDataStore';
@@ -15,10 +15,65 @@ interface AppointmentsDrawerProps {
 }
 
 export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps) {
-    const { appointments, removeAppointment } = useBookingStore();
+    const { appointments, removeAppointment, updateAppointment } = useBookingStore();
     const { services, employees, settings } = useDataStore();
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [cancelling, setCancelling] = useState(false);
+    const [syncing, setSyncing] = useState(false);
+
+    // Синхронизация с БД при открытии: проверяем актуальность каждой записи
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const syncAppointments = async () => {
+            const aptsWithDbId = appointments.filter(a => a.dbId);
+            if (aptsWithDbId.length === 0) return;
+
+            setSyncing(true);
+            try {
+                await Promise.all(
+                    aptsWithDbId.map(async (apt) => {
+                        try {
+                            // Получаем актуальные данные по dbId из БД
+                            const dbAppt = await api.appointments.getOne(apt.dbId!);
+                            if (!dbAppt) return;
+
+                            // Если запись удалена/отменена в БД — убираем из localStorage
+                            if (dbAppt.status === 'cancelled' || dbAppt.status === 'deleted') {
+                                removeAppointment(apt.id);
+                                return;
+                            }
+
+                            // appointment_date может прийти как ISO строка "2026-04-23T00:00:00.000Z"
+                            const dbDateObj = new Date(dbAppt.appointment_date);
+                            const year = dbDateObj.getFullYear();
+                            const month = dbDateObj.getMonth();
+                            const day = dbDateObj.getDate();
+
+                            const [h, m] = (dbAppt.start_time as string).split(':').map(Number);
+
+                            // Создаем валидный Date объект
+                            const newDate = new Date(year, month, day, h, m, 0);
+                            const oldDate = new Date(apt.date);
+
+                            // Если дата или время изменились — обновляем в localStorage
+                            if (newDate.getTime() !== oldDate.getTime() && !isNaN(newDate.getTime())) {
+                                updateAppointment(apt.id, { date: newDate });
+                            }
+                        } catch (err) {
+                            // Если 404 — запись удалена из БД, убираем из localStorage
+                            removeAppointment(apt.id);
+                        }
+                    })
+                );
+            } finally {
+                setSyncing(false);
+            }
+        };
+
+        syncAppointments();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     // Отмена записи: удаляем из базы через API и из localStorage
     const handleCancelAppointment = async (apt: typeof appointments[0]) => {
@@ -65,9 +120,6 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
         }
     };
 
-    // При открытии ящика можно было бы проверить актуальность записей в фоне, 
-    // но пока оставим без Realtime (бэкенд не поддерживает WebSockets)
-
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -113,7 +165,14 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
                     className="relative w-full max-w-sm sm:max-w-md bg-neutral-bg2 shadow-2xl h-[100dvh] flex flex-col border-l border-border z-10"
                 >
                     <div className="p-6 border-b border-border-subtle flex items-center justify-between">
-                        <h2 className="text-xl font-serif text-white">Мои записи {sortedApts.length > 0 && `(${sortedApts.length})`}</h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-serif text-white">Мои записи {sortedApts.length > 0 && `(${sortedApts.length})`}</h2>
+                            {syncing && (
+                                <span title="Обновление данных...">
+                                    <RefreshCw className="w-4 h-4 text-brand-light animate-spin" />
+                                </span>
+                            )}
+                        </div>
                         <button onClick={onClose} className="touch-target rounded-full hover:bg-white/5 text-text-secondary hover:text-white transition-colors bg-white/[0.03]">
                             <X className="w-5 h-5" />
                         </button>
@@ -128,6 +187,7 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
                                     const currentServices = services.filter(s => aptServiceIds.includes(s.id));
                                     const master = employees.find(m => m.id === apt.masterId);
                                     const aptDate = new Date(apt.date);
+                                    const isValidDate = !isNaN(aptDate.getTime());
                                     const totalPrice = currentServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
 
                                     return (
@@ -171,7 +231,10 @@ export function AppointmentsDrawer({ isOpen, onClose }: AppointmentsDrawerProps)
                                                         <span>Дата и время</span>
                                                     </div>
                                                     <p className="text-white font-medium pl-6">
-                                                        {format(aptDate, 'd MMMM, EE', { locale: ru })} в {format(aptDate, 'HH:mm')}
+                                                        {isValidDate 
+                                                            ? `${format(aptDate, 'd MMMM, EE', { locale: ru })} в ${format(aptDate, 'HH:mm')}`
+                                                            : 'Неизвестная дата'
+                                                        }
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-col gap-1">

@@ -26,6 +26,7 @@ const staggerContainer = {
 
 export default function Home() {
     const openBooking = useBookingStore(state => state.openBooking);
+    const startBookingWithService = useBookingStore(state => state.startBookingWithService);
     const navigate = useNavigate();
     const [selectedMaster, setSelectedMaster] = useState<Employee | null>(null);
     const { employees, services } = useDataStore();
@@ -155,7 +156,7 @@ export default function Home() {
                                                 <span className="text-sm text-text-muted flex items-center gap-1"><Clock className="w-3 h-3" /> {service.duration} мин</span>
                                             </div>
                                             <p className="text-sm text-text-secondary mb-6 flex-1 line-clamp-3">{service.description}</p>
-                                            <Button variant="ghost" className="w-full text-brand-light hover:bg-brand/10 bg-brand/5 border border-brand/20 mt-auto" onClick={openBooking}>
+                                            <Button variant="ghost" className="w-full text-brand-light hover:bg-brand/10 bg-brand/5 border border-brand/20 mt-auto" onClick={() => startBookingWithService(service.id)}>
                                                 Записаться
                                             </Button>
                                         </div>
@@ -177,7 +178,7 @@ export default function Home() {
                             className="relative h-[600px] rounded-3xl overflow-hidden glass border-border-subtle group"
                         >
                             <img
-                                src="https://images.unsplash.com/photo-1542037104857-ffbb0b9155fb?q=80&w=1500&auto=format&fit=crop"
+                                src="https://muzhiki.pro/wp-content/uploads/2023/09/barbershop-800x533-1-edited.jpg"
                                 alt="Атмосфера салона"
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1.5s]"
                             />

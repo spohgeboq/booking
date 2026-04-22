@@ -28,8 +28,8 @@ export function Meetings() {
                 <button
                     onClick={() => setViewMode('list')}
                     className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'list'
-                            ? 'bg-neutral-bg2 text-primary shadow-sm'
-                            : 'text-neutral-text2 hover:text-neutral-text1'
+                        ? 'bg-neutral-bg2 text-primary shadow-sm'
+                        : 'text-neutral-text2 hover:text-neutral-text1'
                         }`}
                 >
                     <List className="w-4 h-4 mr-2" />
@@ -38,14 +38,14 @@ export function Meetings() {
                 <button
                     onClick={() => setViewMode('calendar')}
                     className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'calendar'
-                            ? 'bg-neutral-bg2 text-primary shadow-sm'
-                            : 'text-neutral-text2 hover:text-neutral-text1'
+                        ? 'bg-neutral-bg2 text-primary shadow-sm'
+                        : 'text-neutral-text2 hover:text-neutral-text1'
                         }`}
                 >
                     <CalendarIcon className="w-4 h-4 mr-2" />
                     Календарь
                 </button>
-                <button
+                {/* <button
                     onClick={() => setViewMode('schedule')}
                     className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'schedule'
                             ? 'bg-neutral-bg2 text-primary shadow-sm'
@@ -54,7 +54,7 @@ export function Meetings() {
                 >
                     <Clock className="w-4 h-4 mr-2" />
                     Расписание
-                </button>
+                </button> */}
             </div>
 
             <div className="bg-neutral-bg2/80 backdrop-blur-xl rounded-2xl border border-neutral-border p-6 shadow-xl min-h-[500px]">
