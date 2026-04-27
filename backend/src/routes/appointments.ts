@@ -98,11 +98,29 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// POST /api/appointments — создать запись
+// POST /api/appointments — создать запись (с проверкой конфликтов)
 router.post('/', async (req, res) => {
     const { client_name, client_phone, service_id, employee_id,
         appointment_date, start_time, end_time, status, actual_price, commission_earned } = req.body;
     try {
+        // Серверная проверка конфликтов: если мастер уже занят в это время — отклоняем
+        if (employee_id && appointment_date && start_time && end_time) {
+            const conflictResult = await query(
+                `SELECT id FROM appointments 
+                 WHERE employee_id = $1 
+                   AND appointment_date = $2 
+                   AND status IN ('scheduled', 'confirmed')
+                   AND start_time < $4 
+                   AND end_time > $3`,
+                [employee_id, appointment_date, start_time, end_time]
+            );
+            if (conflictResult.rows.length > 0) {
+                return res.status(409).json({ 
+                    error: 'Мастер уже занят в выбранное время. Пожалуйста, выберите другое время.' 
+                });
+            }
+        }
+
         const result = await query(
             `INSERT INTO appointments (client_name, client_phone, service_id, employee_id,
              appointment_date, start_time, end_time, status, actual_price, commission_earned)

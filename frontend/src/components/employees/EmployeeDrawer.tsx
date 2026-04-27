@@ -21,8 +21,8 @@ const defaultScheduleDay = (day: number): ScheduleDay => ({
     is_working: day <= 5,
     start_time: '09:00',
     end_time: '18:00',
-    break_start: '13:00',
-    break_end: '14:00',
+    break_start: '',
+    break_end: '',
 });
 
 const defaultSchedule: ScheduleDay[] = Array.from({ length: 7 }, (_, i) => defaultScheduleDay(i + 1));
@@ -157,8 +157,8 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                             is_working: fromDb.is_working ?? true,
                             start_time: fromDb.start_time?.slice(0, 5) || '09:00',
                             end_time: fromDb.end_time?.slice(0, 5) || '18:00',
-                            break_start: fromDb.break_start?.slice(0, 5) || '13:00',
-                            break_end: fromDb.break_end?.slice(0, 5) || '14:00',
+                            break_start: fromDb.break_start?.slice(0, 5) || '',
+                            break_end: fromDb.break_end?.slice(0, 5) || '',
                         };
                     }
                     return def;
@@ -392,22 +392,82 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                     <label className={labelCls}><Calendar className="w-4 h-4 inline mr-1 text-primary" /> Расписание</label>
                     <div className="rounded-xl border border-neutral-border overflow-hidden">
                         {scheduleData.map((day, idx) => (
-                            <div key={day.day_of_week} className="grid grid-cols-[30px_35px_1fr_auto] gap-2 px-3 py-2 items-center border-b border-neutral-border/50 last:border-b-0">
-                                <span className={`text-xs font-medium ${day.is_working ? 'text-neutral-text1' : 'text-neutral-text3'}`}>{DAY_SHORT[idx]}</span>
-                                <button type="button" onClick={() => updateScheduleDay(idx, 'is_working', !day.is_working)} className={`relative flex items-center justify-center w-8 h-4 rounded-full transition-colors ${day.is_working ? 'bg-green-500' : 'bg-neutral-bg3 border border-neutral-border'}`}>
-                                    <div className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${day.is_working ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </button>
-                                <div className="flex flex-col gap-1">
-                                    {day.is_working ? (
-                                        <div className="flex gap-2">
-                                            <input type="time" value={day.start_time} onChange={e => updateScheduleDay(idx, 'start_time', e.target.value)} className="px-1 py-0.5 bg-neutral-bg3 border border-neutral-border rounded text-xs w-[70px] outline-none" />
-                                            <span className="text-neutral-text3 text-xs">-</span>
-                                            <input type="time" value={day.end_time} onChange={e => updateScheduleDay(idx, 'end_time', e.target.value)} className="px-1 py-0.5 bg-neutral-bg3 border border-neutral-border rounded text-xs w-[70px] outline-none" />
-                                        </div>
-                                    ) : <span className="text-xs text-neutral-text3 italic mt-1">Выходной</span>}
+                            <div key={day.day_of_week} className="px-3 py-2.5 border-b border-neutral-border/50 last:border-b-0">
+                                {/* Строка: День + Переключатель + Время работы + Копировать */}
+                                <div className="grid grid-cols-[30px_35px_1fr_auto] gap-2 items-center">
+                                    <span className={`text-xs font-medium ${day.is_working ? 'text-neutral-text1' : 'text-neutral-text3'}`}>{DAY_SHORT[idx]}</span>
+                                    <button type="button" onClick={() => updateScheduleDay(idx, 'is_working', !day.is_working)} className={`relative flex items-center justify-center w-8 h-4 rounded-full transition-colors ${day.is_working ? 'bg-green-500' : 'bg-neutral-bg3 border border-neutral-border'}`}>
+                                        <div className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${day.is_working ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </button>
+                                    <div className="flex flex-col gap-1">
+                                        {day.is_working ? (
+                                            <div className="flex gap-2">
+                                                <input type="time" value={day.start_time} onChange={e => updateScheduleDay(idx, 'start_time', e.target.value)} className="px-1 py-0.5 bg-neutral-bg3 border border-neutral-border rounded text-xs w-[70px] outline-none" />
+                                                <span className="text-neutral-text3 text-xs">-</span>
+                                                <input type="time" value={day.end_time} onChange={e => updateScheduleDay(idx, 'end_time', e.target.value)} className="px-1 py-0.5 bg-neutral-bg3 border border-neutral-border rounded text-xs w-[70px] outline-none" />
+                                            </div>
+                                        ) : <span className="text-xs text-neutral-text3 italic mt-1">Выходной</span>}
+                                    </div>
+                                    {day.is_working && idx === 0 && (
+                                        <button type="button" onClick={() => copyToAllDays(idx)} className="p-1 hover:bg-neutral-bg3 rounded text-neutral-text3 hover:text-primary" title="Скопировать время на все дни"><Copy className="w-3.5 h-3.5" /></button>
+                                    )}
                                 </div>
-                                {day.is_working && idx === 0 && (
-                                    <button type="button" onClick={() => copyToAllDays(idx)} className="p-1 hover:bg-neutral-bg3 rounded text-neutral-text3 hover:text-primary"><Copy className="w-3.5 h-3.5" /></button>
+
+                                {/* Строка обеда (только для рабочих дней) */}
+                                {day.is_working && (
+                                    <div className="mt-1.5 ml-[65px] flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (day.break_start && day.break_end) {
+                                                    // Убираем обед
+                                                    updateScheduleDay(idx, 'break_start', '');
+                                                    updateScheduleDay(idx, 'break_end', '');
+                                                } else {
+                                                    // Устанавливаем обед по умолчанию
+                                                    updateScheduleDay(idx, 'break_start', '13:00');
+                                                    updateScheduleDay(idx, 'break_end', '14:00');
+                                                }
+                                            }}
+                                            className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium transition-all ${
+                                                day.break_start && day.break_end
+                                                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                                    : 'bg-neutral-bg3/50 text-neutral-text3 border border-neutral-border/50 hover:text-neutral-text2'
+                                            }`}
+                                        >
+                                            <span>🍽</span>
+                                            {day.break_start && day.break_end ? 'Обед' : '+ Обед'}
+                                        </button>
+
+                                        {day.break_start && day.break_end && (
+                                            <>
+                                                <input
+                                                    type="time"
+                                                    value={day.break_start}
+                                                    onChange={e => updateScheduleDay(idx, 'break_start', e.target.value)}
+                                                    className="px-1 py-0.5 bg-amber-500/5 border border-amber-500/20 rounded text-xs w-[70px] outline-none text-amber-300 focus:border-amber-500/50"
+                                                />
+                                                <span className="text-neutral-text3 text-[10px]">-</span>
+                                                <input
+                                                    type="time"
+                                                    value={day.break_end}
+                                                    onChange={e => updateScheduleDay(idx, 'break_end', e.target.value)}
+                                                    className="px-1 py-0.5 bg-amber-500/5 border border-amber-500/20 rounded text-xs w-[70px] outline-none text-amber-300 focus:border-amber-500/50"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        updateScheduleDay(idx, 'break_start', '');
+                                                        updateScheduleDay(idx, 'break_end', '');
+                                                    }}
+                                                    className="text-neutral-text3 hover:text-red-400 text-xs transition-colors p-0.5"
+                                                    title="Убрать обед"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         ))}

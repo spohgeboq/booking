@@ -68,7 +68,13 @@ export function Confirmation() {
                     total_price: totalPrice > 0 ? totalPrice.toLocaleString('ru-RU') : null,
                 }).catch(err => console.error('Ошибка отправки уведомления:', err));
 
-            } catch (err) {
+            } catch (err: any) {
+                // Обработка конфликта: мастер уже занят (кто-то забронировал параллельно)
+                if (err.message?.includes('уже занят') || err.message?.includes('409')) {
+                    alert('К сожалению, это время уже занято. Пожалуйста, выберите другое.');
+                    setStep('DATETIME_SELECTION');
+                    return;
+                }
                 console.error('Ошибка сохранения:', err);
                 // Сохраняем локально даже если база упала
                 addAppointment({
