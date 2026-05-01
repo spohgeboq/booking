@@ -10,6 +10,7 @@ export interface Service {
     duration_minutes?: number;
     description: string;
     image_url?: string;
+    discount_percent?: number;
 }
 
 export interface Employee {
@@ -89,6 +90,7 @@ export const useDataStore = create<DataState>((set, get) => ({
             const services: Service[] = (servicesData || []).map((s: any) => ({
                 ...s,
                 duration: s.duration_minutes ?? s.duration ?? 30,
+                discount_percent: Number(s.discount_percent) || 0,
             }));
 
             // Сотрудники уже приходят с serviceIds из нашего API

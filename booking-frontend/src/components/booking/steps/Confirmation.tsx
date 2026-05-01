@@ -4,7 +4,7 @@ import { useDataStore } from '../../../store/useDataStore';
 import { api } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { Button } from '../../ui/Button';
-import { CheckCircle2, Calendar, User, AlignLeft } from 'lucide-react';
+import { CheckCircle2, Calendar, User, AlignLeft, Tag } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -16,8 +16,16 @@ export function Confirmation() {
     const currentServices = services.filter(s => selectedServices.includes(s.id));
     const selectedMaster = employees.find(m => m.id === masterId);
 
-    // Считаем общую сумму (Number() т.к. price приходит из БД как строка)
-    const totalPrice = currentServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+    // Хелпер: цена с учётом скидки
+    const getDiscountedPrice = (s: { price: number; discount_percent?: number }) => {
+        const discount = Number(s.discount_percent) || 0;
+        return discount > 0 ? Math.round(Number(s.price) * (1 - discount / 100)) : Number(s.price);
+    };
+
+    // Считаем общую сумму С УЧЁТОМ СКИДОК
+    const totalPrice = currentServices.reduce((acc, s) => acc + getDiscountedPrice(s), 0);
+    const totalOriginal = currentServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+    const hasAnyDiscount = currentServices.some(s => Number(s.discount_percent) > 0);
 
     const handleClose = () => {
         closeBooking();
@@ -174,7 +182,15 @@ export function Confirmation() {
                         <div key={service.id} className="flex items-center justify-between text-white text-sm bg-white/[0.03] p-3 rounded-xl border border-white/5">
                             <span className="font-medium">{service.name}</span>
                             <div className="flex items-center gap-4">
-                                <span className="text-brand-light font-medium">{Number(service.price || 0).toLocaleString('ru-RU')} ₸</span>
+                                {Number(service.discount_percent) > 0 ? (
+                                    <span className="flex items-center gap-2">
+                                        <span className="text-text-muted line-through text-xs">{Number(service.price).toLocaleString('ru-RU')} ₸</span>
+                                        <span className="text-emerald-400 font-bold">{getDiscountedPrice(service).toLocaleString('ru-RU')} ₸</span>
+                                        <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded text-[10px] font-bold">-{service.discount_percent}%</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-brand-light font-medium">{Number(service.price || 0).toLocaleString('ru-RU')} ₸</span>
+                                )}
                                 <button
                                     onClick={() => handleRemoveService(service.id)}
                                     className="text-text-muted hover:text-red-400 transition-colors p-1"
@@ -195,7 +211,12 @@ export function Confirmation() {
 
                     <div className="flex items-center justify-between mt-4 pt-4 border-t border-border-subtle">
                         <span className="text-text-secondary font-medium">К оплате в салоне:</span>
-                        <span className="text-xl font-bold text-white">{totalPrice.toLocaleString('ru-RU')} ₸</span>
+                        <div className="flex items-center gap-3">
+                            {hasAnyDiscount && (
+                                <span className="text-sm text-text-muted line-through">{totalOriginal.toLocaleString('ru-RU')} ₸</span>
+                            )}
+                            <span className={`text-xl font-bold ${hasAnyDiscount ? 'text-emerald-400' : 'text-white'}`}>{totalPrice.toLocaleString('ru-RU')} ₸</span>
+                        </div>
                     </div>
                 </div>
             </div>

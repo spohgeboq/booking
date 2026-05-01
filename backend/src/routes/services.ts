@@ -28,12 +28,12 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/services — создать услугу
 router.post('/', async (req, res) => {
-    const { name, description, price, duration_minutes, category, image_url } = req.body;
+    const { name, description, price, duration_minutes, category, image_url, discount_percent } = req.body;
     try {
         const result = await query(
-            `INSERT INTO services (name, description, price, duration_minutes, category, image_url)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [name, description || null, price || 0, duration_minutes || 30, category || null, image_url || null]
+            `INSERT INTO services (name, description, price, duration_minutes, category, image_url, discount_percent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [name, description || null, price || 0, duration_minutes || 30, category || null, image_url || null, discount_percent || 0]
         );
         res.status(201).json(result.rows[0]);
     } catch (error: any) {
@@ -43,12 +43,12 @@ router.post('/', async (req, res) => {
 
 // PUT /api/services/:id — обновить услугу
 router.put('/:id', async (req, res) => {
-    const { name, description, price, duration_minutes, category, image_url } = req.body;
+    const { name, description, price, duration_minutes, category, image_url, discount_percent } = req.body;
     try {
         const result = await query(
             `UPDATE services SET name = $1, description = $2, price = $3, duration_minutes = $4, 
-             category = $5, image_url = $6, updated_at = NOW() WHERE id = $7 RETURNING *`,
-            [name, description, price, duration_minutes, category, image_url, req.params.id]
+             category = $5, image_url = $6, discount_percent = $7, updated_at = NOW() WHERE id = $8 RETURNING *`,
+            [name, description, price, duration_minutes, category, image_url, discount_percent || 0, req.params.id]
         );
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Услуга не найдена' });

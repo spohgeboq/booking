@@ -1,7 +1,7 @@
 import { useBookingStore } from '../../../store/useBookingStore';
 import { useDataStore } from '../../../store/useDataStore';
 import { motion } from 'framer-motion';
-import { ChevronRight, Clock } from 'lucide-react';
+import { ChevronRight, Clock, Tag } from 'lucide-react';
 
 export function ServiceSelection() {
     const { addService, selectedServices, masterId } = useBookingStore();
@@ -28,6 +28,15 @@ export function ServiceSelection() {
             return m > 0 ? `${h} ч ${m} мин` : `${h} ч`;
         }
         return `${minutes} мин`;
+    };
+
+    // Цена с учётом скидки
+    const getDiscountedPrice = (service: { price: number; discount_percent?: number }) => {
+        const discount = Number(service.discount_percent) || 0;
+        if (discount > 0) {
+            return Math.round(Number(service.price) * (1 - discount / 100));
+        }
+        return Number(service.price);
     };
 
     return (
@@ -58,7 +67,17 @@ export function ServiceSelection() {
                         <div>
                             <h4 className="font-medium text-white group-hover:text-brand-light transition-colors">{service.name}</h4>
                             <div className="flex items-center gap-4 mt-1">
-                                <span className="text-xs text-brand-light font-medium">от {service.price.toLocaleString()} ₸</span>
+                                {Number(service.discount_percent) > 0 ? (
+                                    <span className="text-xs font-medium flex items-center gap-1.5">
+                                        <span className="text-text-muted line-through">от {Number(service.price).toLocaleString()} ₸</span>
+                                        <span className="text-emerald-400 font-bold">{getDiscountedPrice(service).toLocaleString()} ₸</span>
+                                        <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5">
+                                            <Tag className="w-2.5 h-2.5" />-{service.discount_percent}%
+                                        </span>
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-brand-light font-medium">от {Number(service.price).toLocaleString()} ₸</span>
+                                )}
                                 <span className="text-xs text-text-muted flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(service.duration)}</span>
                             </div>
                         </div>

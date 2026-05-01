@@ -1,6 +1,6 @@
 import { PageTransition } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
-import { ArrowRight, Sparkles, Clock, CalendarCheck, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Sparkles, Clock, CalendarCheck, CheckCircle2, Tag } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useBookingStore } from '../store/useBookingStore';
 import { useNavigate } from 'react-router-dom';
@@ -146,9 +146,23 @@ export default function Home() {
                                                 alt={service.name}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                             />
-                                            <div className="absolute top-4 right-4 glass px-3 py-1 rounded-full text-xs font-medium text-white shadow-lg">
-                                                {service.price} ₸
-                                            </div>
+                                            {/* Бейдж скидки / цена */}
+                                            {Number(service.discount_percent) > 0 ? (
+                                                <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5">
+                                                    <div className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg shadow-red-500/40">
+                                                        <Tag className="w-3 h-3" />
+                                                        -{service.discount_percent}%
+                                                    </div>
+                                                    <div className="glass px-3 py-1 rounded-full text-xs font-medium text-white shadow-lg">
+                                                        <span className="line-through opacity-60 mr-1.5">{Number(service.price).toLocaleString()} ₸</span>
+                                                        <span className="text-emerald-300 font-bold">{Math.round(Number(service.price) * (1 - Number(service.discount_percent) / 100)).toLocaleString()} ₸</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="absolute top-4 right-4 glass px-3 py-1 rounded-full text-xs font-medium text-white shadow-lg">
+                                                    {Number(service.price).toLocaleString()} ₸
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="px-4 pb-4 flex-1 flex flex-col">
                                             <div className="flex items-center justify-between mb-2">

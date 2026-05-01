@@ -116,8 +116,14 @@ async function initDatabase() {
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW(),
             category TEXT,
-            image_url TEXT
+            image_url TEXT,
+            discount_percent NUMERIC DEFAULT 0
         );
+    `);
+
+    // Миграция: добавить discount_percent если таблица уже существует без этой колонки
+    await pool.query(`
+        ALTER TABLE services ADD COLUMN IF NOT EXISTS discount_percent NUMERIC DEFAULT 0;
     `);
 
     // Таблица employee_services

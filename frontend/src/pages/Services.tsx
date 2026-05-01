@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { Scissors, Plus, Edit, Trash2, Loader2, Search, Clock } from 'lucide-react';
+import { Scissors, Plus, Edit, Trash2, Loader2, Search, Clock, Percent, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -12,6 +12,7 @@ interface Service {
     duration_minutes: number;
     description: string;
     image_url?: string;
+    discount_percent?: number;
 }
 
 export function Services() {
@@ -29,7 +30,8 @@ export function Services() {
         price: 0,
         duration_minutes: 30,
         description: '',
-        image_url: ''
+        image_url: '',
+        discount_percent: 0
     });
 
     useEffect(() => {
@@ -84,7 +86,8 @@ export function Services() {
             price: 0,
             duration_minutes: 30,
             description: '',
-            image_url: ''
+            image_url: '',
+            discount_percent: 0
         });
         setIsModalOpen(true);
     };
@@ -154,6 +157,13 @@ export function Services() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                     {filteredServices.filter(s => (s.category || 'Без категории') === category).map((service) => (
                                         <div key={service.id} className="bg-neutral-bg3/30 border border-neutral-border hover:border-primary/30 rounded-xl p-4 transition-all group relative overflow-hidden flex flex-col h-full">
+                                            {/* Бейдж скидки */}
+                                            {Number(service.discount_percent) > 0 && (
+                                                <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg shadow-red-500/30 animate-pulse">
+                                                    <Tag className="w-3 h-3" />
+                                                    -{service.discount_percent}%
+                                                </div>
+                                            )}
                                             {service.image_url && (
                                                 <div className="w-full h-32 rounded-lg overflow-hidden mb-4 border border-neutral-border shrink-0">
                                                     <img src={service.image_url.startsWith('http') ? service.image_url : `${import.meta.env.VITE_BACKEND_URL}${service.image_url}`} alt={service.name} className="w-full h-full object-cover" />
@@ -182,9 +192,20 @@ export function Services() {
                                             </p>
 
                                             <div className="flex items-center justify-between mt-auto pt-3 border-t border-neutral-border/50 relative z-10">
-                                                <span className="text-lg font-bold text-white tracking-tight">
-                                                    {service.price.toLocaleString()} ₸
-                                                </span>
+                                                {Number(service.discount_percent) > 0 ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-neutral-text3 line-through">
+                                                            {Number(service.price).toLocaleString()} ₸
+                                                        </span>
+                                                        <span className="text-lg font-bold text-emerald-400 tracking-tight">
+                                                            {Math.round(Number(service.price) * (1 - Number(service.discount_percent) / 100)).toLocaleString()} ₸
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-lg font-bold text-white tracking-tight">
+                                                        {Number(service.price).toLocaleString()} ₸
+                                                    </span>
+                                                )}
                                                 <span className="flex items-center text-sm font-medium text-neutral-text2 bg-neutral-bg2 px-2.5 py-1 rounded-md border border-neutral-border/50">
                                                     <Clock className="w-3.5 h-3.5 mr-1.5 opacity-70" />
                                                     {service.duration_minutes} мин
@@ -262,6 +283,38 @@ export function Services() {
                                         value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}
                                         className="w-full px-3 py-2 bg-neutral-bg3/50 border border-neutral-border rounded-xl text-white focus:ring-2 focus:ring-primary/50 outline-none resize-none"
                                     ></textarea>
+                                </div>
+                                {/* Блок скидки */}
+                                <div className="bg-neutral-bg3/30 border border-neutral-border rounded-xl p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className="flex items-center gap-2 text-sm font-medium text-neutral-text2">
+                                            <Percent className="w-4 h-4 text-primary" />
+                                            Скидка
+                                        </label>
+                                        <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full ${
+                                            Number(formData.discount_percent) > 0
+                                                ? 'bg-gradient-to-r from-red-500/20 to-rose-500/20 text-red-400 border border-red-500/30'
+                                                : 'bg-neutral-bg3/50 text-neutral-text3'
+                                        }`}>
+                                            {formData.discount_percent || 0}%
+                                        </span>
+                                    </div>
+                                    <input
+                                        type="range" min="0" max="90" step="5"
+                                        value={formData.discount_percent || 0}
+                                        onChange={e => setFormData({ ...formData, discount_percent: parseInt(e.target.value) })}
+                                        className="w-full h-2 bg-neutral-bg3 rounded-full appearance-none cursor-pointer accent-primary"
+                                    />
+                                    <div className="flex justify-between text-xs text-neutral-text3 mt-1">
+                                        <span>0%</span>
+                                        <span>90%</span>
+                                    </div>
+                                    {Number(formData.discount_percent) > 0 && formData.price ? (
+                                        <div className="mt-3 flex items-center gap-3 text-sm">
+                                            <span className="text-neutral-text3 line-through">{Number(formData.price).toLocaleString()} ₸</span>
+                                            <span className="text-emerald-400 font-bold">→ {Math.round(Number(formData.price) * (1 - Number(formData.discount_percent) / 100)).toLocaleString()} ₸</span>
+                                        </div>
+                                    ) : null}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-text2 mb-1">Фото услуги</label>
