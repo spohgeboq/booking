@@ -11,7 +11,10 @@ model admin_users {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email         String    @unique
   password_hash String
+  role          user_role @default(MASTER)
+  employee_id   String?   @db.Uuid
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  employee      employees? @relation(fields: [employee_id], references: [id], onDelete: SetNull)
 }
 
 model appointments {
@@ -56,12 +59,14 @@ model employees {
   avatar_url        String?
   commission_type   commission_type?
   commission_value  Decimal?            @db.Decimal
+  fixed_salary      Decimal?            @default(0) @db.Decimal
   created_at        DateTime?           @default(now()) @db.Timestamptz(6)
   updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
   image_url         String?
   appointments      appointments[]
   employee_services employee_services[]
   schedules         schedules[]
+  admin_users       admin_users[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -121,4 +126,10 @@ enum appointment_status {
 enum commission_type {
   percentage
   fixed
+  both
+}
+
+enum user_role {
+  OWNER
+  MASTER
 }

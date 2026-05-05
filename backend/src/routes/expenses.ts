@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { authMiddleware, checkRole } from '../middleware/auth';
 
 const router = Router();
 
+// Все расходы доступны только для OWNER
+router.use(authMiddleware, checkRole(['OWNER']));
 // ==========================================
 // Категории расходов (ВАЖНО: до /:id роутов!)
 // ==========================================

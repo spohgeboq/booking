@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // GET /api/appointments — список записей (с фильтрами)
-router.get('/', async (req, res) => {
+// MASTER: принудительно фильтрует по своему employee_id
+router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     try {
         let sql = `
             SELECT a.*, 
@@ -16,6 +18,12 @@ router.get('/', async (req, res) => {
         `;
         const params: any[] = [];
         const conditions: string[] = [];
+
+        // MASTER: принудительно фильтруем по его employee_id
+        if (req.user!.role === 'MASTER' && req.user!.employee_id) {
+            conditions.push(`a.employee_id = $${params.length + 1}`);
+            params.push(req.user!.employee_id);
+        }
 
         if (req.query.date) {
             conditions.push(`a.appointment_date = $${params.length + 1}`);
@@ -33,7 +41,8 @@ router.get('/', async (req, res) => {
             conditions.push(`a.status = $${params.length + 1}`);
             params.push(req.query.status);
         }
-        if (req.query.employee_id) {
+        // Для OWNER — можно фильтровать по employee_id из query
+        if (req.query.employee_id && req.user!.role === 'OWNER') {
             conditions.push(`a.employee_id = $${params.length + 1}`);
             params.push(req.query.employee_id);
         }

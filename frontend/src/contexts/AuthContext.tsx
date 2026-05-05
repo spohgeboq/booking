@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
+// Типы ролей
+export type UserRole = 'OWNER' | 'MASTER';
+
 interface User {
     id: string;
     email: string;
+    role: UserRole;
+    employee_id: string | null;
 }
 
 interface AuthContextType {
@@ -11,6 +16,8 @@ interface AuthContextType {
     loading: boolean;
     signOut: () => void;
     checkAuth: () => Promise<void>;
+    isOwner: boolean;
+    isMaster: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -52,7 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         signOut,
-        checkAuth
+        checkAuth,
+        isOwner: user?.role === 'OWNER',
+        isMaster: user?.role === 'MASTER',
     };
 
     return (

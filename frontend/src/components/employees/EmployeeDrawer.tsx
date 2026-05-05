@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
-import { Users, Loader2, X, Check, Calendar, Copy, Clock, DollarSign, Activity, TrendingUp } from 'lucide-react';
+import { Users, Loader2, X, Check, Calendar, Copy, Clock, DollarSign, Activity, TrendingUp, KeyRound, Trash2, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { format, startOfWeek, startOfMonth } from 'date-fns';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ========== ИНТЕРФЕЙСЫ ==========
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -114,6 +115,13 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
     const [loadingAppointments, setLoadingAppointments] = useState(false);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
+    // === Стейты для управления доступом ===
+    const { isOwner } = useAuth();
+    const [accessInfo, setAccessInfo] = useState<{ hasAccess: boolean; email?: string; created_at?: string } | null>(null);
+    const [generatedCreds, setGeneratedCreds] = useState<{ email: string; password: string } | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
+    const [accessLoading, setAccessLoading] = useState(false);
+
     useEffect(() => {
         if (isOpen) {
             setActiveTab('settings');
@@ -136,10 +144,13 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                 setSelectedServiceIds(employee.serviceIds || []);
                 fetchSchedule(employee.id);
                 fetchAppointments(employee.id, selectedDate);
+                if (isOwner) fetchAccessInfo(employee.id);
             } else {
                 setFormData(emptyForm);
                 setSelectedServiceIds([]);
                 setScheduleData(defaultSchedule);
+                setAccessInfo(null);
+                setGeneratedCreds(null);
             }
         }
     }, [isOpen, employee]);
@@ -286,6 +297,52 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
             break_end: source.break_end,
         })));
         toast.success('Время скопировано на все дни');
+    };
+
+    // === Управление доступом ===
+    const fetchAccessInfo = async (employeeId: string) => {
+        try {
+            const data = await api.employees.getAccess(employeeId);
+            setAccessInfo(data);
+        } catch (e) {
+            setAccessInfo({ hasAccess: false });
+        }
+    };
+
+    const handleGenerateAccess = async () => {
+        if (!employee) return;
+        setAccessLoading(true);
+        try {
+            const data = await api.employees.generateAccess(employee.id);
+            setGeneratedCreds(data.credentials);
+            setAccessInfo({ hasAccess: true, email: data.credentials.email });
+            toast.success('Доступ создан!');
+        } catch (error: any) {
+            if (error.message?.includes('уже существует')) {
+                toast.error('У сотрудника уже есть доступ');
+                fetchAccessInfo(employee.id);
+            } else {
+                toast.error('Ошибка: ' + error.message);
+            }
+        } finally {
+            setAccessLoading(false);
+        }
+    };
+
+    const handleRevokeAccess = async () => {
+        if (!employee) return;
+        if (!confirm('Вы уверены? Сотрудник потеряет доступ к системе.')) return;
+        setAccessLoading(true);
+        try {
+            await api.employees.revokeAccess(employee.id);
+            setAccessInfo({ hasAccess: false });
+            setGeneratedCreds(null);
+            toast.success('Доступ отозван');
+        } catch (error: any) {
+            toast.error('Ошибка: ' + error.message);
+        } finally {
+            setAccessLoading(false);
+        }
     };
 
     const handleStatusChange = async (appointmentId: string, newStatus: string) => {
@@ -513,6 +570,77 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                             value={formData.commission_value}
                             onChange={e => setFormData(prev => ({ ...prev, commission_value: parseInt(e.target.value) || 0 }))}
                             className={inputCls} />
+                    </div>
+                )}
+
+                {/* Секция: Доступ к системе (только для OWNER, только при редактировании) */}
+                {isOwner && employee && (
+                    <div className="border border-neutral-border/50 rounded-xl p-4 space-y-3 bg-neutral-bg3/30">
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-primary" />
+                            <span className="text-sm font-semibold text-neutral-text1">Доступ к системе</span>
+                        </div>
+
+                        {accessLoading ? (
+                            <div className="flex justify-center py-3"><Loader2 className="w-5 h-5 text-primary animate-spin" /></div>
+                        ) : accessInfo?.hasAccess ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                                    <Check className="w-4 h-4 text-green-400" />
+                                    <span className="text-sm text-green-400">Доступ активен</span>
+                                </div>
+                                <div className="text-xs text-neutral-text3">
+                                    Логин: <span className="text-neutral-text1 font-medium">{accessInfo.email}</span>
+                                </div>
+
+                                {/* Показ сгенерированных данных */}
+                                {generatedCreds && (
+                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 space-y-2">
+                                        <p className="text-xs text-amber-400 font-semibold flex items-center gap-1.5">
+                                            <KeyRound className="w-3.5 h-3.5" />
+                                            Запишите данные — пароль не показывается повторно!
+                                        </p>
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-neutral-text3 w-14">Логин:</span>
+                                                <span className="text-sm text-white font-mono">{generatedCreds.email}</span>
+                                                <button type="button" onClick={() => { navigator.clipboard.writeText(generatedCreds.email); toast.success('Скопировано!'); }} className="p-1 hover:bg-white/10 rounded transition-colors">
+                                                    <Copy className="w-3.5 h-3.5 text-neutral-text3" />
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-neutral-text3 w-14">Пароль:</span>
+                                                <span className="text-sm text-white font-mono">
+                                                    {showPassword ? generatedCreds.password : '••••••••'}
+                                                </span>
+                                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="p-1 hover:bg-white/10 rounded transition-colors">
+                                                    {showPassword ? <EyeOff className="w-3.5 h-3.5 text-neutral-text3" /> : <Eye className="w-3.5 h-3.5 text-neutral-text3" />}
+                                                </button>
+                                                <button type="button" onClick={() => { navigator.clipboard.writeText(generatedCreds.password); toast.success('Скопировано!'); }} className="p-1 hover:bg-white/10 rounded transition-colors">
+                                                    <Copy className="w-3.5 h-3.5 text-neutral-text3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button type="button" onClick={handleRevokeAccess} disabled={accessLoading}
+                                    className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" /> Отозвать доступ
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <p className="text-xs text-neutral-text3">
+                                    Сотрудник не имеет доступа к системе. Создайте аккаунт, чтобы мастер мог видеть свои записи и заработок.
+                                </p>
+                                <button type="button" onClick={handleGenerateAccess} disabled={accessLoading}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30 rounded-xl text-sm font-medium transition-all disabled:opacity-50">
+                                    <KeyRound className="w-4 h-4" />
+                                    Создать доступ
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 

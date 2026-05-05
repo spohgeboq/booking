@@ -31,7 +31,10 @@ export function Login() {
             await checkAuth();
             
             toast.success('Успешный вход!');
-            navigate('/schedule', { replace: true });
+
+            // Редирект по роли
+            const redirectPath = data.user?.role === 'MASTER' ? '/my-dashboard' : '/schedule';
+            navigate(redirectPath, { replace: true });
         } catch (error: any) {
             console.error('Login error:', error);
             toast.error(error.message || 'Неправильная электронная почта или пароль');

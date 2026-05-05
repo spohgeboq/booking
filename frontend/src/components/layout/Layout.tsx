@@ -8,35 +8,54 @@ import {
     LogOut,
     Menu,
     X,
-    Wallet
+    Wallet,
+    LayoutDashboard
 } from 'lucide-react';
 import { useState } from 'react';
-const NAVIGATION = [
+import { useAuth, UserRole } from '../../contexts/AuthContext';
+
+// Навигация с ролями
+interface NavItem {
+    name: string;
+    path: string;
+    icon: any;
+    roles?: UserRole[]; // если не указано — доступно всем
+}
+
+const NAVIGATION: NavItem[] = [
+    { name: 'Мой кабинет', path: '/my-dashboard', icon: LayoutDashboard, roles: ['MASTER'] },
     { name: 'Расписание', path: '/schedule', icon: Calendar },
-    { name: 'Сотрудники', path: '/employees', icon: Users },
-    { name: 'Услуги', path: '/services', icon: Briefcase },
-    { name: 'Финансы', path: '/finance', icon: Wallet },
-    { name: 'Настройки', path: '/settings', icon: Settings },
+    { name: 'Сотрудники', path: '/employees', icon: Users, roles: ['OWNER'] },
+    { name: 'Услуги', path: '/services', icon: Briefcase, roles: ['OWNER'] },
+    { name: 'Финансы', path: '/finance', icon: Wallet, roles: ['OWNER'] },
+    { name: 'Настройки', path: '/settings', icon: Settings, roles: ['OWNER'] },
 ];
 
 export function Layout() {
     const location = useLocation();
     const [isMobileOpen, setIsMobileOpen] = useState(false);
+    const { user } = useAuth();
 
     const handleLogout = () => {
         localStorage.removeItem('auth_token');
         window.location.href = '/login';
     };
 
+    // Фильтруем навигацию по роли
+    const filteredNav = NAVIGATION.filter(item => {
+        if (!item.roles) return true; // доступно всем
+        return item.roles.includes(user?.role || 'MASTER');
+    });
+
     const SidebarContent = () => (
         <>
             <div className="flex items-center justify-between h-16 px-6">
                 <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-light to-brand">
-                    Admin CRM
+                    {user?.role === 'MASTER' ? 'Личный кабинет' : 'Admin CRM'}
                 </h1>
             </div>
             <div className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-                {NAVIGATION.map((item) => {
+                {filteredNav.map((item) => {
                     const isActive = location.pathname === item.path;
                     return (
                         <Link
@@ -55,6 +74,14 @@ export function Layout() {
                 })}
             </div>
             <div className="p-4 mt-auto">
+                {user && (
+                    <div className="mb-3 px-4 py-2 text-xs text-text-secondary border border-white/5 rounded-lg bg-white/3">
+                        <div className="font-medium text-text-primary truncate">{user.email}</div>
+                        <div className="mt-0.5 text-[10px] uppercase tracking-wider opacity-60">
+                            {user.role === 'OWNER' ? 'Владелец' : 'Мастер'}
+                        </div>
+                    </div>
+                )}
                 <button
                     onClick={handleLogout}
                     className="flex items-center w-full px-4 py-3 text-text-secondary rounded-lg hover:bg-error/10 hover:text-error transition-colors"
@@ -75,7 +102,9 @@ export function Layout() {
 
             {/* Mobile Header */}
             <div className="md:hidden flex items-center justify-between h-16 w-full px-4 glass-panel border-b border-white/5 fixed top-0 z-30">
-                <h1 className="text-lg font-bold text-brand-light">Admin CRM</h1>
+                <h1 className="text-lg font-bold text-brand-light">
+                    {user?.role === 'MASTER' ? 'Личный кабинет' : 'Admin CRM'}
+                </h1>
                 <button onClick={() => setIsMobileOpen(true)} className="p-2 text-text-secondary">
                     <Menu className="w-6 h-6" />
                 </button>

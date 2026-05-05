@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { authMiddleware, checkRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/settings — получить настройки
-router.get('/', async (_req, res) => {
+// GET /api/settings — получить настройки (доступно всем авторизованным)
+router.get('/', authMiddleware, async (_req, res) => {
     try {
         const result = await query('SELECT * FROM settings LIMIT 1');
         if (result.rows.length === 0) {
@@ -16,8 +17,8 @@ router.get('/', async (_req, res) => {
     }
 });
 
-// PUT /api/settings — обновить настройки (upsert)
-router.put('/', async (req, res) => {
+// PUT /api/settings — обновить настройки (только OWNER)
+router.put('/', authMiddleware, checkRole(['OWNER']), async (req, res) => {
     const { company_name, phone, email, address, working_hours, logo_url,
         default_commission_type, default_commission_value,
         telegram_report_enabled, daily_report_enabled,

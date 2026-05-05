@@ -59,15 +59,29 @@ async function initDatabase() {
         END $$;
     `);
 
+    // ENUM для ролей пользователей
+    await pool.query(`
+        DO $$ BEGIN
+            CREATE TYPE user_role AS ENUM ('OWNER', 'MASTER');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    `);
+
     // Таблица admin_users
     await pool.query(`
         CREATE TABLE IF NOT EXISTS admin_users (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            role user_role NOT NULL DEFAULT 'MASTER',
+            employee_id UUID,
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
     `);
+
+    // Миграция: добавить role и employee_id, если таблица уже существует
+    await pool.query(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role user_role NOT NULL DEFAULT 'MASTER';`);
+    await pool.query(`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS employee_id UUID;`);
 
     // Таблица settings
     await pool.query(`
@@ -219,16 +233,21 @@ async function initDatabase() {
 
     console.log('✅ Все таблицы созданы');
 
-    // 3. Создаём админ-пользователя (пароль: admin)
+    // 3. Создаём админ-пользователя (пароль: admin) с ролью OWNER
     const adminEmail = 'admin@admin.com';
     const adminPassword = 'admin';
     const adminCheck = await pool.query('SELECT 1 FROM admin_users WHERE email = $1', [adminEmail]);
     if (adminCheck.rows.length === 0) {
         const hash = await bcrypt.hash(adminPassword, 10);
-        await pool.query('INSERT INTO admin_users (email, password_hash) VALUES ($1, $2)', [adminEmail, hash]);
-        console.log(`✅ Админ создан: ${adminEmail} / ${adminPassword}`);
+        await pool.query(
+            'INSERT INTO admin_users (email, password_hash, role) VALUES ($1, $2, $3)',
+            [adminEmail, hash, 'OWNER']
+        );
+        console.log(`✅ Админ создан: ${adminEmail} / ${adminPassword} (роль: OWNER)`);
     } else {
-        console.log('ℹ️  Админ уже существует');
+        // Миграция: убедимся, что существующий админ имеет роль OWNER
+        await pool.query("UPDATE admin_users SET role = 'OWNER' WHERE email = $1", [adminEmail]);
+        console.log('ℹ️  Админ уже существует (роль обновлена до OWNER)');
     }
 
     // 4. Миграция данных из Supabase

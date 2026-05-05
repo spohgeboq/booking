@@ -65,6 +65,14 @@ export const api = {
         delete: (id: string) => fetchWithAuth(`/api/employees/${id}`, {
             method: 'DELETE',
         }),
+        // Управление доступом мастера
+        generateAccess: (id: string) => fetchWithAuth(`/api/employees/${id}/generate-access`, {
+            method: 'POST',
+        }),
+        revokeAccess: (id: string) => fetchWithAuth(`/api/employees/${id}/revoke-access`, {
+            method: 'DELETE',
+        }),
+        getAccess: (id: string) => fetchWithAuth(`/api/employees/${id}/access`),
     },
     appointments: {
         getAll: (params?: any) => {

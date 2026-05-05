@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
 // ==========================================
 // GET /api/finance/summary — Агрегированная финансовая сводка
 // Параметры: start_date, end_date
+// OWNER: полная сводка, MASTER: только свои данные
 // ==========================================
-router.get('/summary', async (req, res) => {
+router.get('/summary', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const { start_date, end_date } = req.query;
 
@@ -15,31 +17,41 @@ router.get('/summary', async (req, res) => {
             return res.status(400).json({ error: 'Параметры start_date и end_date обязательны' });
         }
 
+        const isMaster = req.user!.role === 'MASTER';
+        const masterEmployeeId = req.user!.employee_id;
+
         // 1. Общий доход (сумма actual_price завершённых записей за период)
-        const incomeResult = await query(
-            `SELECT COALESCE(SUM(actual_price), 0) as total_income
+        let incomeQuery = `SELECT COALESCE(SUM(actual_price), 0) as total_income
              FROM appointments
              WHERE status = 'completed'
                AND appointment_date >= $1
-               AND appointment_date <= $2`,
-            [start_date, end_date]
-        );
+               AND appointment_date <= $2`;
+        const incomeParams: any[] = [start_date, end_date];
+
+        // MASTER видит только свою выручку
+        if (isMaster && masterEmployeeId) {
+            incomeQuery += ` AND employee_id = $3`;
+            incomeParams.push(masterEmployeeId);
+        }
+
+        const incomeResult = await query(incomeQuery, incomeParams);
         const totalIncome = parseFloat(incomeResult.rows[0].total_income);
 
-        // 2. Общий расход (сумма amount из expenses за период)
-        const expenseResult = await query(
-            `SELECT COALESCE(SUM(amount), 0) as total_expenses
-             FROM expenses
-             WHERE expense_date >= $1
-               AND expense_date <= $2`,
-            [start_date, end_date]
-        );
-        const totalExpenses = parseFloat(expenseResult.rows[0].total_expenses);
+        // 2. Общий расход — только для OWNER
+        let totalExpenses = 0;
+        if (!isMaster) {
+            const expenseResult = await query(
+                `SELECT COALESCE(SUM(amount), 0) as total_expenses
+                 FROM expenses
+                 WHERE expense_date >= $1
+                   AND expense_date <= $2`,
+                [start_date, end_date]
+            );
+            totalExpenses = parseFloat(expenseResult.rows[0].total_expenses);
+        }
 
         // 3. Аналитика по мастерам: выручка + расчёт ЗП
-        //    Поддерживаем 3 типа: percentage, fixed, both
-        const mastersResult = await query(
-            `SELECT
+        let mastersQuery = `SELECT
                 e.id,
                 e.first_name,
                 e.last_name,
@@ -54,11 +66,18 @@ router.get('/summary', async (req, res) => {
                 ON e.id = a.employee_id
                 AND a.status = 'completed'
                 AND a.appointment_date >= $1
-                AND a.appointment_date <= $2
-             GROUP BY e.id
-             ORDER BY total_revenue DESC`,
-            [start_date, end_date]
-        );
+                AND a.appointment_date <= $2`;
+        const mastersParams: any[] = [start_date, end_date];
+
+        // MASTER видит только себя
+        if (isMaster && masterEmployeeId) {
+            mastersQuery += ` WHERE e.id = $3`;
+            mastersParams.push(masterEmployeeId);
+        }
+
+        mastersQuery += ` GROUP BY e.id ORDER BY total_revenue DESC`;
+
+        const mastersResult = await query(mastersQuery, mastersParams);
 
         // Рассчитываем ЗП для каждого мастера с учётом пропорции за период
         const startD = new Date(start_date as string);
@@ -115,8 +134,8 @@ router.get('/summary', async (req, res) => {
         // Общая сумма ЗП мастеров
         const totalSalaries = masters.reduce((sum: number, m: any) => sum + m.salary, 0);
 
-        // Чистая прибыль = Доход - Расходы - ЗП мастеров
-        const netProfit = totalIncome - totalExpenses - totalSalaries;
+        // Чистая прибыль = Доход - Расходы - ЗП мастеров (только для OWNER)
+        const netProfit = isMaster ? 0 : totalIncome - totalExpenses - totalSalaries;
 
         res.json({
             period: {

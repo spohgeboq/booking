@@ -5,7 +5,7 @@ import { generateToken, AuthRequest, authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
-// POST /api/auth/login — вход админа
+// POST /api/auth/login — вход (OWNER или MASTER)
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
@@ -14,7 +14,10 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const result = await query('SELECT * FROM admin_users WHERE email = $1', [email]);
+        const result = await query(
+            'SELECT id, email, password_hash, role, employee_id FROM admin_users WHERE email = $1',
+            [email]
+        );
         const user = result.rows[0];
 
         if (!user) {
@@ -26,11 +29,21 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Неверный email или пароль' });
         }
 
-        const token = generateToken({ id: user.id, email: user.email });
+        const token = generateToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            employee_id: user.employee_id,
+        });
 
         res.json({
             token,
-            user: { id: user.id, email: user.email }
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                employee_id: user.employee_id,
+            }
         });
     } catch (error: any) {
         console.error('Auth error:', error);
@@ -41,7 +54,10 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me — проверка текущей сессии
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const result = await query('SELECT id, email FROM admin_users WHERE id = $1', [req.user!.id]);
+        const result = await query(
+            'SELECT id, email, role, employee_id FROM admin_users WHERE id = $1',
+            [req.user!.id]
+        );
         const user = result.rows[0];
         if (!user) {
             return res.status(401).json({ error: 'Пользователь не найден' });

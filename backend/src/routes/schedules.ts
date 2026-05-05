@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { query } from '../db';
+import { authMiddleware, checkRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/schedules — все расписания
-router.get('/', async (req, res) => {
+// GET /api/schedules — все расписания (доступно всем авторизованным)
+router.get('/', authMiddleware, async (req, res) => {
     try {
         let sql = 'SELECT * FROM schedules';
         const params: any[] = [];
@@ -22,8 +23,8 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST /api/schedules — обновить расписание сотрудника (замена всех дней)
-router.post('/', async (req, res) => {
+// POST /api/schedules — обновить расписание сотрудника (только OWNER)
+router.post('/', authMiddleware, checkRole(['OWNER']), async (req, res) => {
     const { employee_id, schedules } = req.body;
 
     if (!employee_id || !schedules || !Array.isArray(schedules)) {

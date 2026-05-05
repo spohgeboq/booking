@@ -1,7 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, UserRole } from '../contexts/AuthContext';
 
-export function ProtectedRoute() {
+interface ProtectedRouteProps {
+    allowedRoles?: UserRole[];
+}
+
+export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     const { user, loading } = useAuth();
 
     if (loading) {
@@ -14,6 +18,13 @@ export function ProtectedRoute() {
 
     if (!user) {
         return <Navigate to="/login" replace />;
+    }
+
+    // Проверка роли: если указаны allowedRoles и роль не подходит — редирект
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+        // MASTER уходит на свой дашборд, остальные — на расписание
+        const fallback = user.role === 'MASTER' ? '/my-dashboard' : '/schedule';
+        return <Navigate to={fallback} replace />;
     }
 
     return <Outlet />;
