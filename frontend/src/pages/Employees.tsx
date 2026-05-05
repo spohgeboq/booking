@@ -18,8 +18,9 @@ interface Employee {
     certificates: string | null;
     avatar_url: string | null;
     image_url: string | null;
-    commission_type: 'percentage' | 'fixed' | null;
+    commission_type: 'percentage' | 'fixed' | 'both' | null;
     commission_value: number | null;
+    fixed_salary: number | null;
     fullName: string;
     photo_url: string;
     serviceIds: string[];
@@ -210,8 +211,10 @@ export function Employees() {
                                                 <td className="p-4">
                                                     <span className="inline-flex items-center px-2.5 py-1 rounded bg-neutral-bg3/50 border border-neutral-border text-neutral-text1 font-medium text-xs">
                                                         {emp.commission_type === 'percentage'
-                                                            ? `${emp.commission_value ?? 0}% от услуги`
-                                                            : `${emp.commission_value ?? 0} ₸ фиксировано`}
+                                                            ? `${emp.commission_value ?? 0}% от выручки`
+                                                            : emp.commission_type === 'both'
+                                                                ? `${(emp.fixed_salary ?? 0).toLocaleString('ru-RU')} ₸ + ${emp.commission_value ?? 0}%`
+                                                                : `${(emp.commission_value ?? 0).toLocaleString('ru-RU')} ₸ оклад`}
                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>

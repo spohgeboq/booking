@@ -7,6 +7,7 @@ import { Meetings } from './pages/Meetings';
 import { Employees } from './pages/Employees';
 import { Services } from './pages/Services';
 import { Reports } from './pages/Reports';
+import { Finance } from './pages/Finance';
 import { Settings } from './pages/Settings';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -33,6 +34,7 @@ function App() {
                             <Route path="/employees" element={<Employees />} />
                             <Route path="/services" element={<Services />} />
                             <Route path="/reports" element={<Reports />} />
+                            <Route path="/finance" element={<Finance />} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="*" element={<Navigate to="/schedule" replace />} />
                         </Route>

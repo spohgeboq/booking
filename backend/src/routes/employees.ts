@@ -39,16 +39,16 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
     const { first_name, last_name, position, phone, email, address,
         experience_years, specialization, certificates, avatar_url, image_url,
-        commission_type, commission_value, serviceIds } = req.body;
+        commission_type, commission_value, fixed_salary, serviceIds } = req.body;
     try {
         const result = await query(
             `INSERT INTO employees (first_name, last_name, position, phone, email, address,
              experience_years, specialization, certificates, avatar_url, image_url,
-             commission_type, commission_value)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+             commission_type, commission_value, fixed_salary)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
             [first_name, last_name, position, phone, email, address,
                 experience_years || 0, specialization, certificates, avatar_url, image_url,
-                commission_type || 'percentage', commission_value || 0]
+                commission_type || 'percentage', commission_value || 0, fixed_salary || 0]
         );
 
         const employee = result.rows[0];
@@ -73,16 +73,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { first_name, last_name, position, phone, email, address,
         experience_years, specialization, certificates, avatar_url, image_url,
-        commission_type, commission_value, serviceIds } = req.body;
+        commission_type, commission_value, fixed_salary, serviceIds } = req.body;
     try {
         const result = await query(
             `UPDATE employees SET first_name=$1, last_name=$2, position=$3, phone=$4, email=$5,
              address=$6, experience_years=$7, specialization=$8, certificates=$9,
              avatar_url=$10, image_url=$11, commission_type=$12, commission_value=$13,
-             updated_at=NOW() WHERE id=$14 RETURNING *`,
+             fixed_salary=$14, updated_at=NOW() WHERE id=$15 RETURNING *`,
             [first_name, last_name, position, phone, email, address,
                 experience_years, specialization, certificates, avatar_url, image_url,
-                commission_type, commission_value, req.params.id]
+                commission_type, commission_value, fixed_salary || 0, req.params.id]
         );
 
         if (result.rows.length === 0) {

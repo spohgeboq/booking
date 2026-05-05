@@ -132,5 +132,38 @@ export const api = {
         }
 
         return response.json();
-    }
+    },
+    expenses: {
+        getAll: (params?: any) => {
+            const q = params ? `?${new URLSearchParams(params)}` : '';
+            return fetchWithAuth(`/api/expenses${q}`);
+        },
+        create: (data: any) => fetchWithAuth('/api/expenses', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+        update: (id: string, data: any) => fetchWithAuth(`/api/expenses/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        }),
+        delete: (id: string) => fetchWithAuth(`/api/expenses/${id}`, {
+            method: 'DELETE',
+        }),
+    },
+    expenseCategories: {
+        getAll: () => fetchWithAuth('/api/expenses/categories'),
+        create: (name: string) => fetchWithAuth('/api/expenses/categories', {
+            method: 'POST',
+            body: JSON.stringify({ name }),
+        }),
+        delete: (id: string) => fetchWithAuth(`/api/expenses/categories/${id}`, {
+            method: 'DELETE',
+        }),
+    },
+    finance: {
+        getSummary: (params: { start_date: string; end_date: string }) => {
+            const q = `?${new URLSearchParams(params)}`;
+            return fetchWithAuth(`/api/finance/summary${q}`);
+        },
+    },
 };

@@ -14,6 +14,8 @@ import appointmentsRoutes from './routes/appointments';
 import schedulesRoutes from './routes/schedules';
 import settingsRoutes from './routes/settings';
 import uploadRoutes from './routes/upload';
+import expensesRoutes from './routes/expenses';
+import financeRoutes from './routes/finance';
 
 dotenv.config();
 
@@ -47,6 +49,8 @@ app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/schedules', schedulesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/expenses', expensesRoutes);
+app.use('/api/finance', financeRoutes);
 
 // --- POST endpoint для Telegram уведомлений о новой записи ---
 app.post('/api/notify-booking', async (req, res) => {

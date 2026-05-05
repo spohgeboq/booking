@@ -39,7 +39,15 @@ async function initDatabase() {
     // Создаём ENUM типы
     await pool.query(`
         DO $$ BEGIN
-            CREATE TYPE commission_type AS ENUM ('percentage', 'fixed');
+            CREATE TYPE commission_type AS ENUM ('percentage', 'fixed', 'both');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    `);
+
+    // Миграция: добавить значение 'both' в commission_type, если его нет
+    await pool.query(`
+        DO $$ BEGIN
+            ALTER TYPE commission_type ADD VALUE IF NOT EXISTS 'both';
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$;
     `);
@@ -105,6 +113,11 @@ async function initDatabase() {
         );
     `);
 
+    // Миграция: добавить fixed_salary к employees (для режима 'both' — оклад + процент)
+    await pool.query(`
+        ALTER TABLE employees ADD COLUMN IF NOT EXISTS fixed_salary NUMERIC DEFAULT 0;
+    `);
+
     // Таблица services
     await pool.query(`
         CREATE TABLE IF NOT EXISTS services (
@@ -168,6 +181,40 @@ async function initDatabase() {
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+    `);
+
+    // Таблица expenses (расходы)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS expenses (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            title TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'прочее',
+            amount NUMERIC NOT NULL CHECK (amount > 0),
+            expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    `);
+
+    // Таблица expense_categories (кастомные категории расходов)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS expense_categories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    `);
+
+    // Дефолтные категории расходов
+    await pool.query(`
+        INSERT INTO expense_categories (name) VALUES
+            ('Аренда'),
+            ('Материалы'),
+            ('Зарплата'),
+            ('Маркетинг'),
+            ('Коммунальные'),
+            ('Прочее')
+        ON CONFLICT (name) DO NOTHING;
     `);
 
     console.log('✅ Все таблицы созданы');

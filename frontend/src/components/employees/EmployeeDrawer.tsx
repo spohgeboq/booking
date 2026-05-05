@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
-import { Users, Loader2, X, Check, Calendar, Copy, Clock, DollarSign, Activity } from 'lucide-react';
+import { Users, Loader2, X, Check, Calendar, Copy, Clock, DollarSign, Activity, TrendingUp } from 'lucide-react';
+import { format, startOfWeek, startOfMonth } from 'date-fns';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -40,8 +41,9 @@ interface Employee {
     certificates: string | null;
     avatar_url: string | null;
     image_url: string | null;
-    commission_type: 'percentage' | 'fixed' | null;
+    commission_type: 'percentage' | 'fixed' | 'both' | null;
     commission_value: number | null;
+    fixed_salary: number | null;
     fullName: string;
     photo_url: string;
     serviceIds: string[];
@@ -66,8 +68,9 @@ interface FormData {
     specialization: string;
     certificates: string;
     photo_url: string;
-    commission_type: 'percentage' | 'fixed';
+    commission_type: 'percentage' | 'fixed' | 'both';
     commission_value: number;
+    fixed_salary: number;
 }
 
 const emptyForm: FormData = {
@@ -83,6 +86,7 @@ const emptyForm: FormData = {
     photo_url: '',
     commission_type: 'percentage',
     commission_value: 0,
+    fixed_salary: 0,
 };
 
 interface EmployeeDrawerProps {
@@ -127,6 +131,7 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                     photo_url: employee.avatar_url || employee.image_url || '',
                     commission_type: employee.commission_type || 'percentage',
                     commission_value: employee.commission_value || 0,
+                    fixed_salary: (employee as any).fixed_salary || 0,
                 });
                 setSelectedServiceIds(employee.serviceIds || []);
                 fetchSchedule(employee.id);
@@ -213,6 +218,7 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                 avatar_url: formData.photo_url || null,
                 commission_type: formData.commission_type,
                 commission_value: formData.commission_value || 0,
+                fixed_salary: formData.fixed_salary || 0,
                 serviceIds: selectedServiceIds,
             };
 
@@ -474,19 +480,41 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className={labelCls}>Комиссия</label>
-                        <select value={formData.commission_type} onChange={e => setFormData(prev => ({ ...prev, commission_type: e.target.value as any }))} className={inputCls}>
-                            <option value="percentage">%</option>
-                            <option value="fixed">Фикс</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className={labelCls}>Значение</label>
-                        <input type="number" min="0" value={formData.commission_value} onChange={e => setFormData(prev => ({ ...prev, commission_value: parseInt(e.target.value) || 0 }))} className={inputCls} />
-                    </div>
+                <div>
+                    <label className={labelCls}>Тип оплаты</label>
+                    <select value={formData.commission_type} onChange={e => setFormData(prev => ({ ...prev, commission_type: e.target.value as any }))} className={inputCls}>
+                        <option value="percentage">Только процент (%)</option>
+                        <option value="fixed">Только оклад (фикс)</option>
+                        <option value="both">Оклад + Процент</option>
+                    </select>
                 </div>
+
+                {(formData.commission_type === 'fixed' || formData.commission_type === 'both') && (
+                    <div>
+                        <label className={labelCls}>Оклад (₸/мес)</label>
+                        <input type="number" min="0" placeholder="100000"
+                            value={formData.commission_type === 'fixed' ? formData.commission_value : formData.fixed_salary}
+                            onChange={e => {
+                                const val = parseInt(e.target.value) || 0;
+                                if (formData.commission_type === 'fixed') {
+                                    setFormData(prev => ({ ...prev, commission_value: val }));
+                                } else {
+                                    setFormData(prev => ({ ...prev, fixed_salary: val }));
+                                }
+                            }}
+                            className={inputCls} />
+                    </div>
+                )}
+
+                {(formData.commission_type === 'percentage' || formData.commission_type === 'both') && (
+                    <div>
+                        <label className={labelCls}>Процент от выручки (%)</label>
+                        <input type="number" min="0" max="100" placeholder="30"
+                            value={formData.commission_value}
+                            onChange={e => setFormData(prev => ({ ...prev, commission_value: parseInt(e.target.value) || 0 }))}
+                            className={inputCls} />
+                    </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-neutral-border/50">
                     <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-neutral-text2 hover:text-white">Отмена</button>
@@ -556,31 +584,220 @@ export function EmployeeDrawer({ isOpen, onClose, employee, allServices, onSucce
         );
     };
 
+    // ======= Аналитика: Стейты и Логика =======
+    const [analyticsPeriod, setAnalyticsPeriod] = useState<'day' | 'week' | 'month'>('month');
+    const [analyticsData, setAnalyticsData] = useState<any>(null);
+    const [dailyBreakdown, setDailyBreakdown] = useState<any[]>([]);
+    const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+
+    const getAnalyticsRange = useCallback((p: 'day' | 'week' | 'month') => {
+        const today = new Date();
+        const end = format(today, 'yyyy-MM-dd');
+        switch (p) {
+            case 'day': return { start_date: end, end_date: end };
+            case 'week': return { start_date: format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'), end_date: end };
+            case 'month': return { start_date: format(startOfMonth(today), 'yyyy-MM-dd'), end_date: end };
+        }
+    }, []);
+
+    const DAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+    const MONTH_NAMES = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+    const fetchAnalytics = useCallback(async (p: 'day' | 'week' | 'month') => {
+        if (!employee) return;
+        setLoadingAnalytics(true);
+        try {
+            const range = getAnalyticsRange(p);
+
+            // Запрос 1: общая финансовая сводка (для KPI-карточек)
+            const finData = await api.finance.getSummary(range);
+            const masterData = finData.masters?.find((m: any) => m.id === employee.id) || null;
+            setAnalyticsData(masterData);
+
+            // Запрос 2: все записи мастера за период (для детализации по дням)
+            const appts = await api.appointments.getAll({
+                employee_id: employee.id,
+                start_date: range.start_date,
+                end_date: range.end_date,
+            });
+
+            // Группировка по дням
+            const byDay: Record<string, { revenue: number; count: number }> = {};
+            (appts || []).forEach((a: any) => {
+                if (a.status !== 'completed') return;
+                const date = a.appointment_date?.split('T')[0] || a.appointment_date;
+                if (!date) return;
+                if (!byDay[date]) byDay[date] = { revenue: 0, count: 0 };
+                byDay[date].revenue += parseFloat(a.actual_price) || 0;
+                byDay[date].count += 1;
+            });
+
+            // Расчёт ЗП за каждый день
+            const ct = masterData?.commission_type || 'percentage';
+            const cv = masterData?.commission_value || 0;
+            const fs = masterData?.fixed_salary || 0;
+            const startD = new Date(range.start_date);
+            const monthDays = new Date(startD.getFullYear(), startD.getMonth() + 1, 0).getDate();
+            const dailyFixed = fs / monthDays; // дневная часть оклада
+
+            const days = Object.entries(byDay)
+                .map(([date, data]) => {
+                    let daySalary = 0;
+                    switch (ct) {
+                        case 'percentage':
+                            daySalary = data.revenue * (cv / 100);
+                            break;
+                        case 'fixed':
+                            daySalary = (cv / monthDays); // commission_value используется как оклад при type='fixed'
+                            break;
+                        case 'both':
+                            daySalary = dailyFixed + data.revenue * (cv / 100);
+                            break;
+                    }
+                    const d = new Date(date + 'T00:00:00');
+                    return {
+                        date,
+                        dayName: DAY_NAMES[d.getDay()],
+                        dayNum: d.getDate(),
+                        monthName: MONTH_NAMES[d.getMonth()],
+                        revenue: data.revenue,
+                        count: data.count,
+                        salary: Math.round(daySalary),
+                    };
+                })
+                .sort((a, b) => b.date.localeCompare(a.date)); // свежие сверху
+
+            setDailyBreakdown(days);
+        } catch (e: any) {
+            console.error('Ошибка аналитики:', e);
+        } finally {
+            setLoadingAnalytics(false);
+        }
+    }, [employee, getAnalyticsRange]);
+
+    useEffect(() => {
+        if (isOpen && employee && activeTab === 'analytics') {
+            fetchAnalytics(analyticsPeriod);
+        }
+    }, [isOpen, employee, activeTab, analyticsPeriod, fetchAnalytics]);
+
+    const handleAnalyticsPeriodChange = (p: 'day' | 'week' | 'month') => {
+        setAnalyticsPeriod(p);
+    };
+
+    const fmtMoney = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+
+    const getPayLabel = () => {
+        if (!employee) return '—';
+        const ct = (employee as any).commission_type || formData.commission_type;
+        const cv = (employee as any).commission_value ?? formData.commission_value;
+        const fs = (employee as any).fixed_salary ?? formData.fixed_salary;
+        switch (ct) {
+            case 'percentage': return `${cv}%`;
+            case 'fixed': return `${fmtMoney(cv)} ₸/мес`;
+            case 'both': return `${fmtMoney(fs)} ₸ + ${cv}%`;
+            default: return '—';
+        }
+    };
+
     // ======= РЕНДЕР: Аналитика =======
+    const PERIOD_OPTS = [
+        { key: 'day' as const, label: 'Сегодня' },
+        { key: 'week' as const, label: 'Неделя' },
+        { key: 'month' as const, label: 'Месяц' },
+    ];
+
     const renderAnalytics = () => {
-        // Простая статистика по текущим загруженным appointments
-        const completed = appointments.filter(a => a.status === 'completed');
-        const totalEarned = completed.reduce((acc, curr) => acc + (Number(curr.actual_price) || 0), 0);
-        
         return (
-            <div className="p-6 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-neutral-bg3/50 border border-neutral-border rounded-xl p-4 flex flex-col justify-center items-center">
-                        <Activity className="w-6 h-6 text-primary mb-2" />
-                        <div className="text-xs text-neutral-text3">Записей (Всего)</div>
-                        <div className="text-2xl font-bold text-neutral-text1">{appointments.length}</div>
-                    </div>
-                    <div className="bg-neutral-bg3/50 border border-neutral-border rounded-xl p-4 flex flex-col justify-center items-center">
-                        <Check className="w-6 h-6 text-green-400 mb-2" />
-                        <div className="text-xs text-neutral-text3">Завершено</div>
-                        <div className="text-2xl font-bold text-neutral-text1">{completed.length}</div>
-                    </div>
-                    <div className="col-span-2 bg-gradient-to-r from-primary/20 to-primary/5 border border-primary/20 rounded-xl p-6 flex flex-col justify-center items-center">
-                        <DollarSign className="w-8 h-8 text-primary mb-2" />
-                        <div className="text-sm text-primary">Общий доход мастера (выполненные)</div>
-                        <div className="text-4xl font-bold text-white mt-1">{totalEarned.toLocaleString('ru-RU')} ₸</div>
-                    </div>
+            <div className="p-6 space-y-5">
+                {/* Фильтр периода */}
+                <div className="flex items-center gap-1 p-1 bg-neutral-bg3/50 rounded-xl border border-neutral-border">
+                    {PERIOD_OPTS.map(o => (
+                        <button key={o.key} onClick={() => handleAnalyticsPeriodChange(o.key)}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                                analyticsPeriod === o.key
+                                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                                    : 'text-neutral-text3 hover:text-neutral-text1 hover:bg-white/5'
+                            }`}>
+                            {o.label}
+                        </button>
+                    ))}
                 </div>
+
+                {loadingAnalytics ? (
+                    <div className="flex justify-center py-12"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
+                ) : analyticsData ? (
+                    <div className="space-y-3">
+                        {/* Заработок мастера (главная карточка) */}
+                        <div className="bg-gradient-to-r from-amber-500/15 to-amber-500/5 border border-amber-500/20 rounded-xl p-5">
+                            <div className="flex items-center gap-2 mb-1">
+                                <DollarSign className="w-5 h-5 text-amber-400" />
+                                <span className="text-sm text-amber-400 font-medium">Заработок мастера</span>
+                            </div>
+                            <div className="text-3xl font-bold text-white">{fmtMoney(analyticsData.salary)} ₸</div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* Завершено */}
+                            <div className="bg-neutral-bg3/50 border border-neutral-border rounded-xl p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Check className="w-4 h-4 text-green-400" />
+                                    <span className="text-xs text-neutral-text3">Завершено</span>
+                                </div>
+                                <div className="text-xl font-bold text-green-400">{analyticsData.completed_count}</div>
+                            </div>
+
+                            {/* Ставка */}
+                            <div className="bg-neutral-bg3/50 border border-neutral-border rounded-xl p-4">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <TrendingUp className="w-4 h-4 text-primary" />
+                                    <span className="text-xs text-neutral-text3">Ставка</span>
+                                </div>
+                                <div className="text-base font-bold text-white">{getPayLabel()}</div>
+                            </div>
+                        </div>
+
+                        {/* Пропорция оклада */}
+                        {analyticsData.salary_ratio < 1 && (analyticsData.commission_type === 'fixed' || analyticsData.commission_type === 'both') && (
+                            <div className="text-xs text-neutral-text3 text-center bg-neutral-bg3/20 rounded-lg py-2 border border-neutral-border/30">
+                                Оклад рассчитан пропорционально: {Math.round(analyticsData.salary_ratio * 100)}% от месячного
+                            </div>
+                        )}
+
+                        {/* ========== ДЕТАЛИЗАЦИЯ ПО ДНЯМ ========== */}
+                        {dailyBreakdown.length > 0 && (
+                            <div className="pt-2">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Calendar className="w-4 h-4 text-neutral-text2" />
+                                    <span className="text-sm font-semibold text-neutral-text1">Детализация по дням</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {dailyBreakdown.map(day => (
+                                        <div key={day.date} className="bg-neutral-bg3/40 border border-neutral-border/50 rounded-xl p-3.5 hover:border-primary/30 transition-colors">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-sm font-semibold text-neutral-text1">{day.dayNum} {day.monthName}</span>
+                                                    <span className="text-xs text-neutral-text3 ml-1.5">{day.dayName}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[10px] text-neutral-text3 bg-neutral-bg3 px-2 py-0.5 rounded-full border border-neutral-border/50">
+                                                        {day.count} {day.count === 1 ? 'клиент' : day.count < 5 ? 'клиента' : 'клиентов'}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-amber-400">{fmtMoney(day.salary)} ₸</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-center py-12 text-neutral-text3 text-sm">
+                        <Activity className="w-10 h-10 mx-auto opacity-20 mb-3" />
+                        Нет данных за выбранный период
+                    </div>
+                )}
             </div>
         );
     };

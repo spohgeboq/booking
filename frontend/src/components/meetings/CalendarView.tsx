@@ -140,7 +140,7 @@ export function CalendarView() {
     };
 
     const renderDashboard = () => (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">
                 <div>
                     <p className="text-sm text-neutral-text2 font-medium">Всего визитов</p>
@@ -148,15 +148,6 @@ export function CalendarView() {
                 </div>
                 <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
                     <Users className="w-5 h-5 text-blue-400" />
-                </div>
-            </div>
-            <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">
-                <div>
-                    <p className="text-sm text-neutral-text2 font-medium">Выручка (примерно)</p>
-                    <p className="text-2xl font-bold text-brand-light mt-1">{totalRevenue.toLocaleString('ru-RU')} ₸</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-brand" />
                 </div>
             </div>
             <div className="bg-neutral-bg3/30 border border-neutral-border p-4 rounded-xl flex items-center justify-between">

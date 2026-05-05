@@ -7,13 +7,15 @@ import {
     Briefcase,
     LogOut,
     Menu,
-    X
+    X,
+    Wallet
 } from 'lucide-react';
 import { useState } from 'react';
 const NAVIGATION = [
     { name: 'Расписание', path: '/schedule', icon: Calendar },
     { name: 'Сотрудники', path: '/employees', icon: Users },
     { name: 'Услуги', path: '/services', icon: Briefcase },
+    { name: 'Финансы', path: '/finance', icon: Wallet },
     { name: 'Настройки', path: '/settings', icon: Settings },
 ];
 
