@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 
 const router = Router();
 
@@ -11,17 +12,8 @@ if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Конфигурация multer
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (_req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, uniqueSuffix + ext);
-    }
-});
+// Конфигурация multer — memoryStorage для обработки буфера через sharp
+const storage = multer.memoryStorage();
 
 const upload = multer({
     storage,
@@ -37,21 +29,46 @@ const upload = multer({
     }
 });
 
-// POST /api/upload — загрузка файла
-router.post('/', upload.single('file'), (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'Файл не передан' });
+// POST /api/upload — загрузка файла с оптимизацией через sharp
+router.post('/', upload.single('file'), async (req: Request, res: Response) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'Файл не передан' });
+        }
+
+        // Генерируем уникальное имя файла с расширением .webp
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const filename = uniqueSuffix + '.webp';
+        const outputPath = path.join(uploadDir, filename);
+
+        // Обработка изображения: ресайз до 1000px по ширине + конвертация в WebP
+        await sharp(req.file.buffer)
+            .resize({ width: 1000, withoutEnlargement: true })
+            .webp({ quality: 80 })
+            .toFile(outputPath);
+
+        const backendUrl = process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`;
+        const publicUrl = `${backendUrl}/uploads/${filename}`;
+
+        // Получаем размер оптимизированного файла
+        const stats = fs.statSync(outputPath);
+
+        res.json({
+            url: publicUrl,
+            filename,
+            originalName: req.file.originalname, // Оригинальное имя как загрузил юзер
+            size: stats.size
+        });
+    } catch (err) {
+        console.error('Ошибка обработки изображения:', err);
+
+        // Если sharp не смог обработать файл — значит файл невалидный
+        if (err instanceof Error && err.message.includes('Input buffer')) {
+            return res.status(400).json({ error: 'Невалидный файл изображения' });
+        }
+
+        res.status(500).json({ error: 'Ошибка при обработке изображения' });
     }
-
-    const backendUrl = process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`;
-    const publicUrl = `${backendUrl}/uploads/${req.file.filename}`;
-
-    res.json({
-        url: publicUrl,
-        filename: req.file.filename,
-        originalName: req.file.originalname,
-        size: req.file.size
-    });
 });
 
 export default router;

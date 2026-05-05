@@ -4,8 +4,8 @@ import { authMiddleware, checkRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/settings — получить настройки (доступно всем авторизованным)
-router.get('/', authMiddleware, async (_req, res) => {
+// GET /api/settings — получить настройки (публичный доступ для клиентского фронтенда)
+router.get('/', async (_req, res) => {
     try {
         const result = await query('SELECT * FROM settings LIMIT 1');
         if (result.rows.length === 0) {

@@ -4,8 +4,8 @@ import { authMiddleware, checkRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/schedules — все расписания (доступно всем авторизованным)
-router.get('/', authMiddleware, async (req, res) => {
+// GET /api/schedules — все расписания (публичный доступ для клиентского фронтенда)
+router.get('/', async (req, res) => {
     try {
         let sql = 'SELECT * FROM schedules';
         const params: any[] = [];

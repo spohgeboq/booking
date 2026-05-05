@@ -2,24 +2,46 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query } from '../db';
 import { authMiddleware, checkRole, AuthRequest } from '../middleware/auth';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'booking-secret-key-2026';
 
 const router = Router();
 
 // GET /api/employees — все сотрудники с их serviceIds
-// OWNER: все, MASTER: только свой профиль
-router.get('/', authMiddleware, async (req: AuthRequest, res) => {
+// Публичный доступ для клиентского фронтенда (без токена — все мастера)
+// С токеном MASTER — только свой профиль
+router.get('/', async (req: AuthRequest, res) => {
     try {
-        // Если MASTER — вернуть только себя
-        if (req.user!.role === 'MASTER' && req.user!.employee_id) {
-            const empResult = await query('SELECT * FROM employees WHERE id = $1', [req.user!.employee_id]);
-            const esResult = await query('SELECT employee_id, service_id FROM employee_services WHERE employee_id = $1', [req.user!.employee_id]);
-            const employees = empResult.rows.map((emp: any) => ({
-                ...emp,
-                serviceIds: esResult.rows.map((es: any) => es.service_id),
-            }));
-            return res.json(employees);
+        // Проверяем, есть ли токен (опциональная авторизация)
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            try {
+                const decoded = jwt.verify(token, JWT_SECRET) as any;
+                const userResult = await query(
+                    'SELECT id, email, role, employee_id FROM admin_users WHERE id = $1',
+                    [decoded.id]
+                );
+                if (userResult.rows.length > 0) {
+                    const dbUser = userResult.rows[0];
+                    // Если MASTER — вернуть только себя
+                    if (dbUser.role === 'MASTER' && dbUser.employee_id) {
+                        const empResult = await query('SELECT * FROM employees WHERE id = $1', [dbUser.employee_id]);
+                        const esResult = await query('SELECT employee_id, service_id FROM employee_services WHERE employee_id = $1', [dbUser.employee_id]);
+                        const employees = empResult.rows.map((emp: any) => ({
+                            ...emp,
+                            serviceIds: esResult.rows.map((es: any) => es.service_id),
+                        }));
+                        return res.json(employees);
+                    }
+                }
+            } catch {
+                // Невалидный токен — просто отдаём публичный список
+            }
         }
 
+        // Публичный доступ: все сотрудники
         const empResult = await query('SELECT * FROM employees ORDER BY first_name');
         const esResult = await query('SELECT employee_id, service_id FROM employee_services');
 
