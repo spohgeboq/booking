@@ -5,7 +5,7 @@ import {
     startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, X, DollarSign, Users, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, X, Users, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -56,7 +56,6 @@ export function CalendarView() {
     // Stats
     const currentMonthAppointments = appointments.filter(a => isSameMonth(new Date(a.appointment_date), currentDate));
     const totalVisits = currentMonthAppointments.filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status)).length;
-    const totalRevenue = currentMonthAppointments.filter(a => ['scheduled', 'confirmed', 'completed'].includes(a.status)).reduce((acc, a) => acc + (Number(a.actual_price) || Number(a.services?.price) || 0), 0);
     const totalCancellations = currentMonthAppointments.filter(a => a.status === 'cancelled').length;
 
     const getHeatmapColor = (count: number, isCurrentMonth: boolean) => {

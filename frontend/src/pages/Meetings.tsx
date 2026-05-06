@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar as CalendarIcon, List, Clock, Plus } from 'lucide-react';
+import { Calendar as CalendarIcon, List, Plus } from 'lucide-react';
 import { ListView } from '../components/meetings/ListView';
 import { CalendarView } from '../components/meetings/CalendarView';
 import { ScheduleView } from '../components/meetings/ScheduleView';

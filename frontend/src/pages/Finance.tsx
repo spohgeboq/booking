@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { format, subDays, startOfWeek, startOfMonth, startOfYear } from 'date-fns';
 import {
-    TrendingUp, TrendingDown, DollarSign, Minus, Plus, X,
-    Loader2, Trash2, Edit3, Users, Receipt, Calendar
+    TrendingUp, TrendingDown, DollarSign, Plus, X,
+    Loader2, Trash2, Edit3, Users, Receipt
 } from 'lucide-react';
 
 // ==========================================

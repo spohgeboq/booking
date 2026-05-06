@@ -4,7 +4,7 @@ import { useDataStore } from '../../../store/useDataStore';
 import { api } from '../../../lib/api';
 import { motion } from 'framer-motion';
 import { Button } from '../../ui/Button';
-import { CheckCircle2, Calendar, User, AlignLeft, Tag } from 'lucide-react';
+import { CheckCircle2, Calendar, User, AlignLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 

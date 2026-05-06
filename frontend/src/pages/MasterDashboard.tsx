@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { format, startOfWeek, startOfMonth } from 'date-fns';
-import { ru } from 'date-fns/locale';
 import {
     DollarSign,
     Calendar,

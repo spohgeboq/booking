@@ -54,3 +54,6 @@ booking-frontend/node_modules/
 backend/dist/
 frontend/dist/
 booking-frontend/dist/
+
+# Docker
+docker-compose.override.yml
